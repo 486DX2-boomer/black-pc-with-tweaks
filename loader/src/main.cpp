@@ -125,6 +125,7 @@ bool parse_args()
         else if (a == L"--no-reverb") g_cfg.reverb = false;
         else if (a == L"--no-ramp") g_cfg.ramp = false;
         else if (a == L"--no-aa") g_cfg.aa = false;
+        else if (a == L"--rescale-at") { if (!next(g_cfg.rescale_at)) return false; }
         else if (a == L"--reverb-gain") {
             std::wstring v;
             if (!next(v)) return false;

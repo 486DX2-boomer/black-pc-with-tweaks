@@ -110,7 +110,10 @@ void surface_size(const PixelContainer *s, uint32_t *w, uint32_t *h)
 // Render resolution scale (--scale): host render targets and depth buffers are this many times the Xbox
 // size; keys and everything the game sees stay in Xbox pixels. In widescreen the game draws a 16:9 picture
 // into its 4:3 buffers (anamorphic), so the host targets are widened by 4/3 as well.
-float g_scale_x, g_scale_y; // set at CreateDevice (setup_render_scale)
+float g_scale_x, g_scale_y; // set at CreateDevice (setup_render_scale), changed at run time by change_render_scale
+int g_native_w, g_native_h; // the picture size the native render size was made for
+D3DRECT g_scissor;          // the game's scissor rectangle (Xbox pixels) and whether it is on, to re-apply after a rescale
+bool g_scissor_on;
 
 // The render size: --resolution (WxH, H, native) or --scale. x and y are separate factors, so any size works;
 // in widescreen a picture with square pixels has x = 4/3 y. Kept within Direct3D 9's 8192 texture limit.
@@ -119,8 +122,8 @@ void setup_render_scale(int pic_w, int pic_h)
     float aspect = g_cfg.widescreen ? 4.0f / 3.0f : 1.0f, w = (float)g_width, h = (float)g_height;
     float sx = g_cfg.scale * aspect, sy = g_cfg.scale;
     if (g_cfg.render_native && pic_w > 0 && pic_h > 0) {
-        sx = pic_w / w;
-        sy = pic_h / h;
+        sx = pic_w * g_cfg.render_factor / w;
+        sy = pic_h * g_cfg.render_factor / h;
     } else if (g_cfg.render_h > 0) {
         sy = g_cfg.render_h / h;
         sx = g_cfg.render_w > 0 ? g_cfg.render_w / w : sy * aspect;
@@ -449,16 +452,19 @@ void present_backbuffer()
     if (key_pressed(VK_F8, focus)) g_cfg.gamma = std::min(3.0f, g_cfg.gamma + 0.1f);
     if (key_pressed(VK_F9, focus)) g_cfg.aa = !g_cfg.aa;
     static int shown_aa = -1;
-    if (shown_gamma != g_cfg.gamma || shown_gain != g_cfg.gain || shown_sens != g_cfg.mouse_sens || shown_aa != (int)g_cfg.aa) {
+    static uint32_t shown_rh;
+    if (shown_gamma != g_cfg.gamma || shown_gain != g_cfg.gain || shown_sens != g_cfg.mouse_sens || shown_aa != (int)g_cfg.aa ||
+        shown_rh != host_h(g_height) * 65536 + host_w(g_width)) {
+        shown_rh = host_h(g_height) * 65536 + host_w(g_width);
         shown_gamma = g_cfg.gamma;
         shown_gain = g_cfg.gain;
         shown_sens = g_cfg.mouse_sens;
         shown_aa = g_cfg.aa;
-        char title[220];
+        char title[260];
         snprintf(title, sizeof title,
-                 "%sBLACK - mouse %.2f (F3/F4), gain %.1f (F5/F6), gamma %.1f (F7/F8), AA %s (F9), F11 fullscreen",
+                 "%sBLACK - mouse %.2f (F3/F4), gain %.1f (F5/F6), gamma %.1f (F7/F8), AA %s (F9), render %ux%u (F10), F11 fullscreen",
                  g_cfg.background ? "[AUTOMATED TEST, MUTED] " : "", g_cfg.mouse_sens, g_cfg.gain, g_cfg.gamma,
-                 g_cfg.aa ? "on" : "off");
+                 g_cfg.aa ? "on" : "off", host_w(g_width), host_h(g_height));
         host3d::set_title(title);
         logf("[d3d] mouse sensitivity %.2f, output gain %.1f, gamma %.1f, anti-aliasing %s", g_cfg.mouse_sens, g_cfg.gain,
              g_cfg.gamma, g_cfg.aa ? "on" : "off");
@@ -719,7 +725,9 @@ HRESULT __stdcall Direct3D_CreateDevice(uint32_t Adapter, uint32_t DeviceType, u
     if (!host3d::create_device()) return D3DERR_NOTAVAILABLE;
     RECT frame, pic; // the picture's size in the window (for --resolution native)
     host3d::frame_layout(&frame, &pic);
-    setup_render_scale(pic.right - pic.left, pic.bottom - pic.top);
+    g_native_w = pic.right - pic.left;
+    g_native_h = pic.bottom - pic.top;
+    setup_render_scale(g_native_w, g_native_h);
     logf("[d3d] rendering at %ux%u (x%.4g by x%.4g the Xbox's %dx%d, %s), picture in the window %ldx%ld", host_w(g_width),
          host_h(g_height), scale_x(), scale_y(), g_width, g_height, g_cfg.widescreen ? "widescreen 16:9" : "4:3",
          pic.right - pic.left, pic.bottom - pic.top);
@@ -946,6 +954,98 @@ void capture_frame()
     }
 }
 
+// Change the render size while running (between frames). Every host target was made at the old scale: the
+// colour targets, depth buffers, depth views, snapshot copies and anti-aliasing intermediates are dropped and
+// come back on demand at the new size (their contents for one frame are lost; the game redraws them every
+// frame), then the game's current target and depth buffer are bound again with the viewport and scissor.
+// Textures still bound for sampling stay alive in Direct3D until the next draw replaces them.
+void change_render_scale(int pic_w, int pic_h)
+{
+    float ox = g_scale_x, oy = g_scale_y;
+    setup_render_scale(pic_w, pic_h);
+    if (fabsf(ox - g_scale_x) < 1e-4f && fabsf(oy - g_scale_y) < 1e-4f) return;
+    host3d::end_scene();
+    IDirect3DDevice9 *d = host3d::dev();
+    d->SetRenderTarget(0, g_host_backbuffer);
+    d->SetDepthStencilSurface(g_host_depth);
+    for (auto &kv : g_rts)
+        if (kv.second.tex) kv.second.tex->Release();
+    g_rts.clear();
+    for (auto &kv : g_zs) {
+        if (kv.second.surf) kv.second.surf->Release();
+        if (kv.second.tex) kv.second.tex->Release();
+    }
+    g_zs.clear();
+    for (auto &kv : g_zviews)
+        if (kv.second) kv.second->Release();
+    g_zviews.clear();
+    for (auto &kv : g_snapshots)
+        if (kv.second) kv.second->Release();
+    g_snapshots.clear();
+    for (IDirect3DTexture9 *&t : g_aa_tex)
+        if (t) {
+            t->Release();
+            t = nullptr;
+        }
+    g_cur_rt = nullptr;
+    bind_render_target(g_st.render_target ? g_st.render_target : g_backbuffer, g_st.depth_stencil);
+    apply_viewport();
+    if (g_scissor_on) {
+        RECT r = host_rect(g_scissor.x1, g_scissor.y1, g_scissor.x2, g_scissor.y2);
+        d->SetScissorRect(&r);
+    }
+    logf("[d3d] render size changed to %ux%u (x%.4g by x%.4g)", host_w(g_width), host_h(g_height), g_scale_x, g_scale_y);
+}
+
+// After each Swap: F10 cycles the render size between 1, 1.5 and 2 x the window (switching to native mode),
+// and in native mode the render size follows the window once a resize has settled for 0.3 s.
+void check_render_size()
+{
+    bool focus = GetForegroundWindow() == host3d::window(), now = false;
+    if (!g_cfg.rescale_at.empty()) { // tests: "S:factor,..." acts like F10 to that factor at S seconds
+        static ULONGLONG t0 = GetTickCount64();
+        static size_t next_item;
+        std::string spec = narrow(g_cfg.rescale_at);
+        size_t pos = 0;
+        for (size_t i = 0; pos < spec.size(); i++) {
+            size_t comma = spec.find(',', pos);
+            std::string item = spec.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos);
+            if (i == next_item && GetTickCount64() - t0 >= (ULONGLONG)(atof(item.c_str()) * 1000.0)) {
+                size_t colon = item.find(':');
+                g_cfg.render_factor = colon == std::string::npos ? 1.0f : (float)atof(item.c_str() + colon + 1);
+                g_cfg.render_native = true;
+                now = true;
+                next_item++;
+                break;
+            }
+            if (comma == std::string::npos) break;
+            pos = comma + 1;
+        }
+    }
+    if (key_pressed(VK_F10, focus)) {
+        if (!g_cfg.render_native) g_cfg.render_factor = 1.0f;
+        else g_cfg.render_factor = g_cfg.render_factor < 1.25f ? 1.5f : g_cfg.render_factor < 1.75f ? 2.0f : 1.0f;
+        g_cfg.render_native = true;
+        now = true;
+    }
+    if (!g_cfg.render_native) return;
+    RECT frame, pic;
+    host3d::frame_layout(&frame, &pic);
+    int w = pic.right - pic.left, h = pic.bottom - pic.top;
+    static int want_w, want_h;
+    static ULONGLONG since;
+    if (!now && w == g_native_w && h == g_native_h) return;
+    if (w != want_w || h != want_h) {
+        want_w = w;
+        want_h = h;
+        since = GetTickCount64();
+    }
+    if (!now && GetTickCount64() - since < 300) return;
+    g_native_w = w;
+    g_native_h = h;
+    change_render_scale(w, h);
+}
+
 uint32_t __stdcall D3DDevice_Swap(uint32_t Flags)
 {
     DTRACE("0x%x", Flags);
@@ -979,6 +1079,7 @@ uint32_t __stdcall D3DDevice_Swap(uint32_t Flags)
         screenshot_now(tag);
     }
     host3d::present();
+    check_render_size();
     dev_field<uint32_t>(DEV_SWAPCOUNT)++;
     g_swap_count++;
     if (frames % 60 == 0 || frames < 4)
@@ -1167,11 +1268,14 @@ void __stdcall D3DDevice_SetScissors(uint32_t Count, BOOL Exclusive, const D3DRE
     IDirect3DDevice9 *d = host3d::dev();
     if (!Count || !pRects) {
         d->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+        g_scissor_on = false;
         return;
     }
     RECT r = host_rect(pRects[0].x1, pRects[0].y1, pRects[0].x2, pRects[0].y2);
     d->SetScissorRect(&r);
     d->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
+    g_scissor = pRects[0];
+    g_scissor_on = true;
     if (Count > 1 || Exclusive) KNOTE_ONCE("SetScissors with %u rects / exclusive %d: only the first rect is used", Count, Exclusive);
 }
 

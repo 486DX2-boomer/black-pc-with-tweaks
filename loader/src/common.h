@@ -53,6 +53,8 @@ struct Config {
     float scale = 3.0f;        // render resolution = Xbox resolution x scale (any factor, e.g. 2.25 = 1080 lines)
     int render_w = 0, render_h = 0; // --resolution WxH or H: the picture's render size instead of a scale
     bool render_native = false;     // --resolution native: render at the window's (or screen's) size
+    float render_factor = 1.0f;     // with native: render at this multiple of the window (F10 cycles 1 / 1.5 / 2)
+    std::wstring rescale_at;        // tests: --rescale-at "S:factor,..." = F10 to that factor at S seconds
     int window_w = 0, window_h = 0; // window client size; 0 = fit the screen
     // The console's video settings report a widescreen TV (EEPROM XC_VIDEO bit 16), as the Xbox Series does
     // for original Xbox games: BLACK then uses a 16:9 projection and its `_wide` UI layouts in the same 640x480
