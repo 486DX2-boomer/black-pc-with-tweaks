@@ -24,7 +24,9 @@ Open work on the BLACK PC port. Findings and addresses live in `NOTES.md`; this 
 
 ## Next
 
-- [ ] Resolution: better downsampling for scale 4 into small windows (box filter instead of one bilinear tap).
+- [x] Custom render resolution: `--resolution WxH | H | native`, fractional `--scale` (any size, not just multiples).
+- [ ] Resolution: better downsampling when the render size is much larger than the window (box filter instead of
+      one bilinear tap); optionally re-create the render targets when the window is resized with `native`.
 - [ ] Rebindable keys (a config file) if the in-game button remapping is not enough.
 - [ ] Remember gain/gamma, mouse sensitivity, window size/fullscreen between launches instead of only flags.
 

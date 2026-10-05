@@ -50,7 +50,9 @@ struct Config {
     uint32_t shot_start = 0;   // --shot-start: no cadence screenshots before this many seconds
     unsigned debug_frame_end = 0; // --debug-frame N-M: last frame of a traced range (0 = single frame)
     float gamma = 1.0f;        // output gamma applied when presenting (F7/F8 adjust it live)
-    int scale = 3;             // render resolution = Xbox resolution x scale (Xbox Series renders up to 3-4x)
+    float scale = 3.0f;        // render resolution = Xbox resolution x scale (any factor, e.g. 2.25 = 1080 lines)
+    int render_w = 0, render_h = 0; // --resolution WxH or H: the picture's render size instead of a scale
+    bool render_native = false;     // --resolution native: render at the window's (or screen's) size
     int window_w = 0, window_h = 0; // window client size; 0 = fit the screen
     // The console's video settings report a widescreen TV (EEPROM XC_VIDEO bit 16), as the Xbox Series does
     // for original Xbox games: BLACK then uses a 16:9 projection and its `_wide` UI layouts in the same 640x480

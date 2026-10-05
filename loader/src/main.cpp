@@ -45,7 +45,9 @@ void usage()
            "  --shot-every N    with --screenshot: every N frames (default 60)\n"
            "  --shot-start S    with --screenshot: start the cadence S seconds after the first frame\n"
            "  --gamma G         extra output gamma after the game's ramp (default 1.0; >1 brighter; F7/F8 adjust live)\n"
-           "  --scale N         render at N x the Xbox resolution, 1-4 (default 3 = 1920x1440)\n"
+           "  --scale K         render at K x the Xbox resolution, any factor 0.5-8 (default 3 = 2560x1440 widescreen)\n"
+           "  --resolution R    render size instead of --scale: WxH (e.g. 1920x1080), H (width from the aspect)\n"
+           "                    or native (the window's size at start, the screen's with --fullscreen)\n"
            "  --window WxH      window client size (default: largest size of the game's aspect that fits the screen)\n"
            "  --normal-aspect   4:3 like an original Xbox on a standard TV (default: widescreen 16:9)\n"
            "  --fullscreen      start in borderless fullscreen (F11 toggles)\n"
@@ -156,8 +158,21 @@ bool parse_args()
         } else if (a == L"--scale") {
             std::wstring v;
             if (!next(v)) return false;
-            g_cfg.scale = _wtoi(v.c_str());
-            if (g_cfg.scale < 1 || g_cfg.scale > 4) g_cfg.scale = 3;
+            g_cfg.scale = (float)_wtof(v.c_str());
+            if (g_cfg.scale < 0.5f || g_cfg.scale > 8.0f) g_cfg.scale = 3.0f;
+        } else if (a == L"--resolution") {
+            std::wstring v;
+            if (!next(v)) return false;
+            if (v == L"native") g_cfg.render_native = true;
+            else {
+                size_t x = v.find_first_of(L"xX");
+                if (x == std::wstring::npos) g_cfg.render_h = _wtoi(v.c_str()); // height only: width from the aspect
+                else {
+                    g_cfg.render_w = _wtoi(v.c_str());
+                    g_cfg.render_h = _wtoi(v.c_str() + x + 1);
+                }
+                if (g_cfg.render_h < 240 || g_cfg.render_h > 8192) g_cfg.render_w = g_cfg.render_h = 0;
+            }
         } else if (a == L"--window") {
             std::wstring v;
             if (!next(v)) return false;
