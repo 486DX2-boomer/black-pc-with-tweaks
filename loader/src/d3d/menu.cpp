@@ -1,10 +1,11 @@
 // Menu bar of the game window. Settings change live where the port can (render size, anti-aliasing,
-// brightness, reverb, mouse); aspect ratio and frame rate are read by the game at boot, so those apply after
+// brightness, reverb, mouse, auto-aim); aspect ratio and frame rate are read by the game at boot, so those apply after
 // a restart. Every change is saved to black.ini (settings.cpp).
 #include "d3d/menu.h"
 
 #include "common.h"
 #include "d3d/device.h"
+#include "input/autoaim.h"
 #include "settings.h"
 
 #include <algorithm>
@@ -41,6 +42,8 @@ HMENU build()
 {
     HMENU bar = CreateMenu();
     HMENU game = popup(bar, L"&Game");
+    item(game, ID_NO_AUTOAIM, L"Disable &auto-aim");
+    sep(game);
     item(game, ID_EXIT, L"E&xit\tAlt+F4");
 
     HMENU video = popup(bar, L"&Video");
@@ -129,6 +132,7 @@ void update(HMENU bar, bool fullscreen)
              : close_to(g_cfg.mouse_sens, 3.0f) ? ID_SENS_3 : close_to(g_cfg.mouse_sens, 4.0f) ? ID_SENS_4 : 0;
     for (UINT id = ID_SENS_1; id <= ID_SENS_4; id++) check(bar, id, id == s);
     check(bar, ID_INVERT, g_cfg.mouse_invert);
+    check(bar, ID_NO_AUTOAIM, !g_cfg.autoaim);
 }
 
 void command(HWND hwnd, UINT id)
@@ -166,6 +170,7 @@ void command(HWND hwnd, UINT id)
     case ID_SENS_UP: g_cfg.mouse_sens = std::min(50.0f, g_cfg.mouse_sens * 1.1f); break;
     case ID_SENS_DOWN: g_cfg.mouse_sens = std::max(0.1f, g_cfg.mouse_sens / 1.1f); break;
     case ID_INVERT: g_cfg.mouse_invert = !g_cfg.mouse_invert; break;
+    case ID_NO_AUTOAIM: autoaim_set(!g_cfg.autoaim); break;
     case ID_CONTROLS:
         MessageBoxW(hwnd,
                     L"Mouse: look (click the picture to capture it, Esc or Alt+Tab releases it)\n"

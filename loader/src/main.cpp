@@ -6,6 +6,7 @@
 #include "image.h"
 #include "timing.h"
 #include "settings.h"
+#include "input/autoaim.h"
 #include "input/mouselook.h"
 #include "kernel/ktable.h"
 #include "kernel/xboxkrnl.h"
@@ -60,6 +61,7 @@ void usage()
            "  --rawvideo <file> record the picture as raw BGRX frames from --shot-start for --clip-seconds (default 4)\n"
            "  --mouse-sens K    mouse look sensitivity, K x 0.022 degrees per count (default 2.0; F3/F4 adjust live)\n"
            "  --mouse-invert    mouse forward looks down\n"
+           "  --no-autoaim      turn off the game's auto-aim (the view pulling toward enemies)\n"
            "  --gain K          output gain after the game's gamma ramp (default 1.0; F5/F6 adjust live)\n"
            "  --no-ramp         ignore the game's gamma ramp (no fades, half brightness: the raw framebuffer)\n"
            "  --no-aa           no anti-aliasing (default: edge-directed post filter; F9 toggles)\n"
@@ -155,6 +157,7 @@ bool parse_args()
             g_cfg.mouse_sens = (float)_wtof(v.c_str());
             if (g_cfg.mouse_sens < 0.05f || g_cfg.mouse_sens > 50.0f) g_cfg.mouse_sens = 2.0f;
         } else if (a == L"--mouse-invert") { g_cfg.mouse_invert = true; settings_mark_cli("mouse_invert"); }
+        else if (a == L"--no-autoaim") { g_cfg.autoaim = false; settings_mark_cli("autoaim"); }
         else if (a == L"--gamma") {
             settings_mark_cli("gamma");
             std::wstring v;
@@ -345,6 +348,7 @@ int run(void *reserve, unsigned reserve_size)
     if (known_build && !xd3d::install_d3d_hooks()) return 1;
     if (known_build) install_timing_patches();
     if (known_build) install_mouselook_patches();
+    if (known_build) install_autoaim_patch();
     if (known_build && g_cfg.fps == 60 && !install_60fps_patches()) g_cfg.fps = 30;
     if (!kdpc_init()) {
         logf("could not start the kernel DPC/timer thread");

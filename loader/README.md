@@ -35,14 +35,14 @@ factor, default 3 = 2560x1440 in widescreen, 1920x1440 in 4:3); `--resolution 19
 `native` = the window's size, and then it follows the window when it is resized) sets the render size directly. `--window WxH` sets the window size (default: the
 largest that fits the screen), `--fullscreen` starts borderless fullscreen. `--gain K` / `--gamma G` adjust the
 output after the game's own gamma ramp (default 1.0 / 1.0; `--no-ramp` shows the raw framebuffer). `--mouse-sens K` (0.022 degrees x K per count, default 2.0) and
-`--mouse-invert` tune mouse look. `--fps 30|60` (default 30, the original; 60 is experimental: weapons fire too fast). `--reverb-gain K`
+`--mouse-invert` tune mouse look; `--no-autoaim` turns off the game's auto-aim (the view pulling toward enemies). `--fps 30|60` (default 30, the original; 60 is experimental: weapons fire too fast). `--reverb-gain K`
 (default 1.0) / `--no-reverb` for the room reverb. `--no-aa` turns off the anti-aliasing.
 
 Relative paths resolve against the current folder; if the game is not found there, black.exe looks upwards
 from its own folder for `game\default.xbe` and uses that folder (so it can be started from anywhere).
 
 The window has a menu bar (Game, Video, Audio, Input, Help) for the port's settings: render resolution,
-anti-aliasing, fullscreen, aspect ratio and frame rate (after restart), brightness, reverb, mouse. Choices are
+anti-aliasing, fullscreen, aspect ratio and frame rate (after restart), brightness, reverb, mouse, auto-aim. Choices are
 saved to `black.ini` in the game folder; command-line flags override it for that run. Esc releases the mouse
 so the menu can be reached. In the game window: F11 fullscreen on/off (the window resizes at the game's aspect; other shapes get black
 bars), F3/F4 mouse sensitivity, F5/F6 gain, F7/F8 gamma, F9 anti-aliasing, F10 render size 1 / 1.5 / 2 x the window (all shown in the title), F12 dumps the next frame

@@ -16,6 +16,8 @@ Open work on the BLACK PC port. Findings and addresses live in `NOTES.md`; this 
 - [ ] Widescreen (default; the game's own 16:9 mode, `--normal-aspect` for 4:3): menus, HUD, videos, briefings.
 - [ ] Window resizing at a fixed aspect, F11 fullscreen, black bars when maximised.
 - [x] Mouse look: rotates the view directly (user: "feels awesome").
+- [ ] Auto-aim switch (Game > Disable auto-aim, `--no-autoaim`; default on = original): confirm in play that the view
+      no longer drifts onto enemies with it ticked, and that nothing else changes.
 - [ ] Keyboard layout: the user's binding is in (see loader/README.md); confirm in play.
 - [ ] 60 fps (`--fps 60`, not the default): world step 1/60 s, audio fine, weapon refire and reload blur now match
       30 fps (measured). Check the rest in play: other weapons/fire modes, animations, AI, effects, scripted scenes;
