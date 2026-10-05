@@ -1,0 +1,83 @@
+# BLACK loader
+
+Runs the original `default.xbe` natively as a 32-bit Windows process with an HLE Xbox kernel, D3D (on
+Direct3D 9), DirectSound (XAudio2) and input (XInput, keyboard and mouse). The game is playable.
+
+## Build
+
+Needs Visual Studio 2026 (or 2022) Build Tools with the C++ x86 toolchain. CMake ships with VS
+(`...\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe`) if it is not on PATH.
+
+```
+cmake --preset win32                 # or win32-vs2022
+cmake --build build/win32 --config RelWithDebInfo
+```
+
+Output: `build/win32/RelWithDebInfo/black.exe` + `blackrt.dll` (keep them together).
+
+## Run (from the project root)
+
+```
+loader\build\win32\RelWithDebInfo\black.exe --info game\default.xbe     # print XBE structure
+loader\build\win32\RelWithDebInfo\black.exe --timeout 30 game\default.xbe
+```
+
+Options: `--hdd <dir>` (host folder for HDD partitions, default `.\hdd`), `--log <file>` (default `.\black.log`),
+`--trace` (log every kernel call), `--strict` (stop at the first unimplemented kernel call), `--multicore`,
+`--symbols <functions.csv>` (default `notes\functions.csv`), `--force` (other XBE builds),
+`--skip-videos` (dev: 9-second logo video instead of the long ones). `black.exe --help` lists the debugging
+options (`--timeout`, `--screenshot`, `--shot-every`, `--shot-start`, `--debug-frame`, `--press`, `--watch`,
+`--watch-pad`, `--probe`, `--background`, `--wav`).
+
+Display: widescreen 16:9 by default (the console reports a widescreen TV and BLACK switches to its own 16:9
+camera and UI layouts); `--normal-aspect` for 4:3. `--scale N` renders at N x the Xbox resolution (1-4,
+default 3 = 2560x1440 in widescreen, 1920x1440 in 4:3). `--window WxH` sets the window size (default: the
+largest that fits the screen), `--fullscreen` starts borderless fullscreen. `--gain K` / `--gamma G` adjust the
+output after the game's own gamma ramp (default 1.0 / 1.0; `--no-ramp` shows the raw framebuffer). `--mouse-sens K` (0.022 degrees x K per count, default 2.0) and
+`--mouse-invert` tune mouse look. `--fps 30|60` (default 30, the original; 60 is experimental: weapons fire too fast). `--reverb-gain K`
+(default 1.0) / `--no-reverb` for the room reverb.
+
+Relative paths resolve against the current folder; if the game is not found there, black.exe looks upwards
+from its own folder for `game\default.xbe` and uses that folder (so it can be started from anywhere).
+
+In the game window: F11 fullscreen on/off (the window resizes at the game's aspect; other shapes get black
+bars), F3/F4 mouse sensitivity, F5/F6 gain, F7/F8 gamma (all shown in the title), F12 dumps the next frame
+(draw log, every render target as PNG) into `work\dumps` for bug reports.
+
+Controls: every PC controller drives the Xbox pad on port 0. Keyboard and mouse (click the window to capture
+the mouse, Alt+Tab releases it): mouse = look (rotates the view directly), left button = right trigger, right
+button = right stick click, wheel up / down = D-pad left / right; WASD = left stick, R = A, F = B, E = X, Q = Y,
+G = left trigger, C = left stick click, Z / X = D-pad up / down, Enter = START, Space = BACK (select),
+arrows = D-pad. BLACK and WHITE have no keys. The game's controls screen reassigns actions to pad buttons.
+
+## Local launcher (icon + shortcut)
+
+The icon comes from the user's XBE, so it is stamped into a local copy only (`work\` is git-ignored;
+nothing game-derived goes into the repo or the build):
+
+```
+copy loader\build\win32\RelWithDebInfo\black.exe work\run\ & copy loader\build\win32\RelWithDebInfo\blackrt.dll work\run\
+python tools\xbe_images.py game\default.xbe work\icons
+python tools\set_exe_icon.py work\run\black.exe work\icons\title_image.ico
+powershell -File tools\make_shortcut.ps1 -Link BLACK.lnk -Target work\run\black.exe -Arguments "--hdd work\hdd --log work\play.log"
+```
+
+`BLACK.lnk` stores the target relative to itself as well (found again after the folder moves or the drive
+letter changes); its "Start in" is empty because black.exe finds the project folder itself.
+
+## Layout
+
+| File | What |
+|---|---|
+| `stub/stub.c` | `black.exe`: no CRT, linked at `0x10000` with a large BSS so its image owns the XBE range |
+| `src/main.cpp` | `BlackMain`: arguments, build check (SHA-256), startup order |
+| `src/image.cpp` | maps the XBE over the stub image, splices a PE header in for Windows, `XeLoadSection` |
+| `src/xthread.cpp` | per-thread Xbox state; rewrites `fs:[0x04/0x20/0x24/0x28/0x58]` to TLS slots; IRQL lock |
+| `src/hooks.cpp` | library hooks (tables in `*_functions.inc`), crash reports, `--watch`/`--probe` |
+| `src/kernel/` | HLE kernel: `ktable.cpp` (ordinal table + logging stub), memory, threads, sync, DPC/timers, files, Rtl, misc |
+| `src/d3d/` | D3D HLE on Direct3D 9: device/state, resources, textures, draws, push buffer, NV2A vertex programs and register combiners to HLSL |
+| `src/audio/` | DirectSound HLE: software mixer (`dsound.cpp`), room reverb (`reverb.cpp`) and XAudio2 output (`output.cpp`) |
+| `src/input/` | XInput HLE: PC controllers, keyboard and mouse; `mouselook.cpp` feeds the mouse into the game's view angles |
+| `src/*_functions.inc` | generated by `tools/gen_section_table.py` from `notes/functions.csv` (addresses and names only) |
+
+Design notes and findings are in `../NOTES.md`.

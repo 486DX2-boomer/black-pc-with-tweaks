@@ -1,0 +1,110 @@
+openjdk version "21.0.12.1" 2026-08-18
+OpenJDK Runtime Environment Homebrew (build 21.0.12.1)
+OpenJDK 64-Bit Server VM Homebrew (build 21.0.12.1, mixed mode)
+INFO  Using log config file: jar:file:/opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml (LoggingInitialization)  
+INFO  Using log file: /Users/mihaildruz/Library/ghidra/ghidra_12.1.4_PUBLIC/application.log (LoggingInitialization)  
+INFO  Loading user preferences: /Users/mihaildruz/Library/ghidra/ghidra_12.1.4_PUBLIC/preferences (Preferences)  
+INFO  Searching for classes... (ClassSearcher)  
+INFO  Class search complete (803 ms) (ClassSearcher)  
+INFO  Initializing SSL Context (DefaultSSLContextInitializer)  
+INFO  Initializing Random Number Generator... (SecureRandomFactory)  
+INFO  Random Number Generator initialization complete: NativePRNGNonBlocking (SecureRandomFactory)  
+INFO  Trust manager disabled, cacerts have not been set (DefaultTrustManagerFactory)  
+INFO  Starting cache cleanup: /var/tmp/mihaildruz-ghidra/fscache2 (FileCacheMaintenanceDaemon)  
+INFO  Finished cache cleanup, estimated storage used: 0 (FileCacheMaintenanceDaemon)  
+INFO  Headless startup complete (1594 ms) (AnalyzeHeadless)  
+INFO  Class searcher loaded 59 extension points (20 false positives) (ClassSearcher)  
+INFO  HEADLESS Script Paths:
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Processors/JVM/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Processors/PIC/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Features/PyGhidra/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Debug/Debugger/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Features/PDB/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Features/VersionTracking/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Features/FunctionID/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Features/BytePatterns/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Features/BSim/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Features/Decompiler/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Processors/DATA/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Features/Base/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Features/FileFormats/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Processors/8051/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.1.4/libexec/Ghidra/Processors/Atmel/ghidra_scripts
+    /Users/mihaildruz/Library/ghidra/ghidra_12.1.4_PUBLIC/Extensions/ghidra-xbe-build/ghidra_scripts (HeadlessAnalyzer)  
+INFO  HEADLESS: execution starts (HeadlessAnalyzer)  
+INFO  Creating project: /Users/mihaildruz/ghidra-projects/black-pc/black (HeadlessAnalyzer)  
+INFO  Creating project: /Users/mihaildruz/ghidra-projects/black-pc/black (DefaultProject)  
+INFO  REPORT: Processing input files:  (HeadlessAnalyzer)  
+INFO       project: /Users/mihaildruz/ghidra-projects/black-pc/black (HeadlessAnalyzer)  
+INFO  IMPORTING: file:///Volumes/spark198rus/black-pc/game/default.xbe (HeadlessAnalyzer)  
+INFO  Using Loader: Xbox Executable Format (XBE) (ProgramLoader)  
+INFO  Using Language/Compiler: x86:LE:32:default:windows (ProgramLoader)  
+INFO  Using Library Search Path: [., /System/Library/dyld/dyld_shared_cache_arm64e, /System/Library/dyld/dyld_shared_cache_x86_64, /System/Library/dyld/dyld_shared_cache_x86_64h, /System/Cryptexes/OS/System/Library/dyld/dyld_shared_cache_arm64e, /System/Cryptexes/OS/System/Library/dyld/dyld_shared_cache_x86_64, /System/Cryptexes/OS/System/Library/dyld/dyld_shared_cache_x86_64h, /Users/mihaildruz/Library/Java/Extensions, /Library/Java/Extensions, /Network/Library/Java/Extensions, /System/Library/Java/Extensions, /usr/lib/java] (ProgramLoader)  
+INFO  Additional info:
+Loading file:///Volumes/spark198rus/black-pc/game/default.xbe?MD5=ef09df225db8fbb97f0afccac7a7faaf...
+------------------------------------------------
+
+Linking the External Programs of 'default.xbe' to imported libraries...
+  [xboxkrnl.exe] -> not found in project
+------------------------------------------------
+
+ (ProgramLoader)  
+INFO  IMPORTING: Loaded 0 additional files (HeadlessAnalyzer)  
+INFO  ANALYZING all memory and code: file:///Volumes/spark198rus/black-pc/game/default.xbe (HeadlessAnalyzer)  
+WARN  Decompiling 00268880: Unable to read bytes at ram:24748bce (DecompileCallback)  
+WARN  Decompiling 00268880, pcode error at 0b2c245c: Could not follow disassembly flow into non-existing memory at 0b2c245c (DecompileCallback)  
+WARN  Decompiling 00268880: Unable to read bytes at ram:24748bce (DecompileCallback)  
+WARN  Decompiling 00268880, pcode error at 0b2c245c: Could not follow disassembly flow into non-existing memory at 0b2c245c (DecompileCallback)  
+WARN  Decompiling 00268880: Unable to read bytes at ram:24748bce (DecompileCallback)  
+WARN  Decompiling 0026d480: Unable to read bytes at ram:20c883a5 (DecompileCallback)  
+WARN  Decompiling 0026d480, pcode error at eb000000: Could not follow disassembly flow into non-existing memory at eb000000 (DecompileCallback)  
+WARN  Decompiling 0026d480: Unable to read bytes at ram:20c883a5 (DecompileCallback)  
+WARN  Decompiling 0026d480, pcode error at eb000000: Could not follow disassembly flow into non-existing memory at eb000000 (DecompileCallback)  
+WARN  Decompiling 0026d480: Unable to read bytes at ram:20c883a5 (DecompileCallback)  
+INFO  Packed database cache: /var/tmp/mihaildruz-ghidra/packed-db-cache (PackedDatabaseCache)  
+INFO  Applied data type archive: generic_clib (ApplyDataArchiveAnalyzer)  
+WARN  Decompiling 002747d0: Unable to read bytes at ram:cccccccc (DecompileCallback)  
+INFO  -----------------------------------------------------
+    Apply Data Archives                        0.205 secs
+    Call Convention ID                         2.381 secs
+    Call-Fixup Installer                       0.254 secs
+    Create Address Tables                      0.251 secs
+    Create Address Tables - One Time           2.856 secs
+    Create Function                            1.111 secs
+    Data Reference                             3.196 secs
+    Decompiler Switch Analysis                51.931 secs
+    Disassemble                                4.907 secs
+    Disassemble Entry Points                   0.163 secs
+    Embedded Media                             0.026 secs
+    External Entry References                  0.001 secs
+    Function ID                                2.369 secs
+    Function Start Pre Search                  0.072 secs
+    Function Start Search                      2.502 secs
+    Function Start Search After Code           0.127 secs
+    Function Start Search After Data           0.457 secs
+    Function Start Search delayed - One Time   0.019 secs
+    Non-Returning Functions - Discovered       0.950 secs
+    Reference                                  3.810 secs
+    Shared Return Calls                        0.723 secs
+    Stack                                      9.065 secs
+    Subroutine References                      1.399 secs
+    Subroutine References - One Time           0.006 secs
+    X86 Function Callee Purge                  0.283 secs
+    Xbox Symbol Database Analyzer              3.356 secs
+    Xbox XTLID Symbol ID Analyzer              0.010 secs
+    x86 Constant Reference Analyzer            8.373 secs
+-----------------------------------------------------
+     Total Time   100 secs
+-----------------------------------------------------
+ (AutoAnalysisManager)  
+INFO  REPORT: Analysis succeeded for file: file:///Volumes/spark198rus/black-pc/game/default.xbe (HeadlessAnalyzer)  
+INFO  /default.xbe: file created (mihaildruz) (LocalFileSystem)  
+INFO  REPORT: Save succeeded for: /default.xbe (black:/default.xbe) (HeadlessAnalyzer)  
+INFO  REPORT: Import succeeded (HeadlessAnalyzer)  
