@@ -438,7 +438,11 @@ void write_report(Recording *r)
     std::wstring dir = L"perf";
     CreateDirectoryW(dir.c_str(), nullptr);
     dir += L"\\" + widen(r->started);
-    CreateDirectoryW(dir.c_str(), nullptr);
+    for (int i = 2; !CreateDirectoryW(dir.c_str(), nullptr) && GetLastError() == ERROR_ALREADY_EXISTS && i < 100; i++) {
+        size_t cut = dir.rfind(L"__");
+        if (i > 2 && cut != std::wstring::npos) dir.resize(cut); // two recordings in one second (parallel test runs)
+        dir += L"__" + std::to_wstring(i);
+    }
     const std::vector<Frame> &F = r->frames;
     double kcyc_ms = r->tsc_hz > 0 ? 1e6 / r->tsc_hz : 0; // 1000 cycles -> ms
 

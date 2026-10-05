@@ -1,13 +1,14 @@
 // Xbox textures -> host textures. Swizzled (Morton order) and linear layouts are decoded on the CPU into
 // A8R8G8B8, DXT data is uploaded as is. Host copies are cached per resource header and re-uploaded when
 // the header changes, the game locks the texture, or a sampled hash of the texel data changes (checked at the
-// first use in a frame; later binds in the same frame reuse the result).
+// first use in a frame, every 16th frame for textures that have not changed for a while).
 #include "d3d/device.h"
 #include "d3d/dispatch.h"
 #include "d3d/host.h"
 #include "d3d/state.h"
 #include "perf.h"
 
+#include <algorithm>
 #include <cstring>
 #include <unordered_map>
 #include <vector>
@@ -22,7 +23,13 @@ struct Entry {
     uint32_t hash = 0;
     bool dirty = false;
     uint32_t checked_frame = ~0u; // the frame the contents were last checked (hashing on every bind cost ~8 ms a frame)
+    uint32_t stable = 0;          // consecutive checks without a change
 };
+
+// A texture whose contents did not change for this many checks is checked every 16th frame only (busy
+// scenes bind hundreds of textures a frame; hashing each once a frame still cost ~3 ms). Textures that
+// change (video frames, render-to-memory) stay at one check a frame; a Lock marks a texture dirty at once.
+constexpr uint32_t kStableChecks = 30;
 
 std::unordered_map<const Resource *, Entry> g_cache;
 CRITICAL_SECTION g_cs;
@@ -316,7 +323,8 @@ IDirect3DBaseTexture9 *host_texture(Resource *r, Palette *pal)
     EnterCriticalSection(&g_cs);
     Entry &e = g_cache[r];
     uint32_t frame = g_frame_count.load(std::memory_order_relaxed);
-    if (e.tex && e.checked_frame == frame && !e.dirty && e.data == pc->Data && e.format == pc->Format && e.size == pc->Size &&
+    bool skip = e.checked_frame == frame || (e.stable >= kStableChecks && ((frame + ((uintptr_t)r >> 6)) & 15) != 0);
+    if (skip && e.tex && !e.dirty && e.data == pc->Data && e.format == pc->Format && e.size == pc->Size &&
         e.palette == (pal ? phys_to_virt(pal->Data) : nullptr)) {
         IDirect3DBaseTexture9 *t = e.tex;
         LeaveCriticalSection(&g_cs);
@@ -329,6 +337,7 @@ IDirect3DBaseTexture9 *host_texture(Resource *r, Palette *pal)
     if (fmt_of(pc) == XFMT_P8 && pal) hash ^= sample_hash((const uint8_t *)palptr, 1024);
     bool same_shape = e.tex && e.data == pc->Data && e.format == pc->Format && e.size == pc->Size;
     bool stale = !same_shape || e.dirty || e.hash != hash || (fmt_of(pc) == XFMT_P8 && e.palette != palptr);
+    e.stable = stale ? 0 : std::min<uint32_t>(e.stable + 1, kStableChecks);
     if (stale && same_shape) { // contents changed (video frames, render-to-memory): refill in place
         refill(e.tex, r, pal);
         perf::add_texture_upload(bytes);

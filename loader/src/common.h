@@ -65,6 +65,8 @@ struct Config {
     // scale most PC shooters use (F3/F4 adjust live).
     float mouse_sens = 2.0f;
     bool mouse_invert = false;
+    bool timer_vblank = false; // --timer-vblank: free-running 59.94 Hz vblank instead of following the display
+    bool display_vblank = false; // --display-vblank (tests): follow the display even with --background
     bool autoaim = true;       // the game's view pull toward targets (input/autoaim.cpp; --no-autoaim, menu)
     int fps = 30;              // --fps 60: swap interval TWO paced as ONE and the world steps 1/60 s (timing.cpp);
                                // not the default yet: weapon fire still runs per frame (twice as fast)

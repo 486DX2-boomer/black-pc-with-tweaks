@@ -24,7 +24,8 @@ Open work on the BLACK PC port. Findings and addresses live in `NOTES.md`; this 
       decide whether 60 becomes the default.
 - [ ] 60 fps slowdowns in busy scenes (user; also on PS2): the port's CPU overhead on the one game thread is the limit
       (perf recorder, NOTES.md). Round 1 done (texture checks once per frame, faster vertex conversion, shader key reuse,
-      XInput): test scene 10.8 -> 5.1 ms. User to re-record the busy scene. Next: VS constants only when changed (broke the
+      XInput): test scene 10.8 -> 5.1 ms; busy scene 78% -> 99.5% game speed. Round 2: stable textures checked every 16th frame.
+      Stutter at 100% game speed: vblank now follows the display (DwmFlush), event wake in pace_swap; user to confirm. Next: VS constants only when changed (broke the
       picture, see NOTES), cache converted vertices in host buffers, log writes off the render thread, game CPU other than CPU 0.
 - [ ] Reverb (bin 11 send into an FDN reverb): level and character against the Xbox (`--reverb-gain`).
 

@@ -603,24 +603,66 @@ void apply_viewport()
 // (+0x1DBC, waited on by D3DDevice_BlockUntilVerticalBlank and game threads) and calls the callback set
 // with SetVerticalBlankCallback (+0x1DB8) with a D3DVBLANKDATA {VBlank, Swap, Flags}.
 std::atomic<uint32_t> g_vblank_count, g_swap_count;
+HANDLE g_vblank_wake = CreateEventW(nullptr, FALSE, FALSE, nullptr); // wakes pace_swap at each vblank
+
+// The emulated vblank follows the display's when the display refreshes at about 60 Hz: DwmFlush returns after
+// the desktop composition that shows the last Present, and composition runs at the display's vblank. A
+// free-running 59.94 Hz timer drifts against the display (59.95 Hz on the user's), and while the phase sat
+// near the composition deadline, frames were shown a refresh late or skipped: stutter now and then with no
+// slow frames in the performance recordings. When DwmFlush returns early (nothing presented yet, window
+// minimised) the tick falls back to the timer. Other refresh rates, --background and --timer-vblank use the
+// timer only.
+using DwmFlushFn = HRESULT(WINAPI *)();
+DwmFlushFn display_sync()
+{
+    if (g_cfg.timer_vblank || (g_cfg.background && !g_cfg.display_vblank)) return nullptr;
+    DEVMODEW dm = {};
+    dm.dmSize = sizeof dm;
+    if (!EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &dm) || dm.dmDisplayFrequency < 59 || dm.dmDisplayFrequency > 61) return nullptr;
+    HMODULE m = LoadLibraryW(L"dwmapi.dll");
+    return m ? (DwmFlushFn)GetProcAddress(m, "DwmFlush") : nullptr;
+}
 
 void __stdcall vblank_thread(void *)
 {
     xthread_current()->base_priority = 15;
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
     timeBeginPeriod(1);
-    LARGE_INTEGER f, start, now;
+    LARGE_INTEGER f, last, now;
     QueryPerformanceFrequency(&f);
-    QueryPerformanceCounter(&start);
-    for (uint64_t n = 1;; n++) {
-        int64_t due = start.QuadPart + (int64_t)(n * f.QuadPart * 1001 / 60000); // 59.94 Hz
-        for (;;) {
+    QueryPerformanceCounter(&last);
+    const int64_t period = f.QuadPart * 1001 / 60000; // 59.94 Hz
+    DwmFlushFn flush = display_sync();
+    logf("[d3d] vblank: %s", flush ? "follows the display (DwmFlush at ~60 Hz)" : "59.94 Hz timer");
+    uint32_t from_display = 0;
+    LARGE_INTEGER minute = last;
+    for (;;) {
+        bool synced = false;
+        if (flush && SUCCEEDED(flush())) {
             QueryPerformanceCounter(&now);
-            int64_t left_ms = (due - now.QuadPart) * 1000 / f.QuadPart;
-            if (left_ms <= 0) break;
-            Sleep(left_ms > 2 ? (DWORD)(left_ms - 1) : 0);
+            synced = now.QuadPart - last.QuadPart > period / 2;
         }
+        if (!synced) {
+            int64_t due = last.QuadPart + period;
+            for (;;) {
+                QueryPerformanceCounter(&now);
+                int64_t left_ms = (due - now.QuadPart) * 1000 / f.QuadPart;
+                if (left_ms <= 0) break;
+                Sleep(left_ms > 2 ? (DWORD)(left_ms - 1) : 0);
+            }
+            // keep the timer's cadence (no drift from late wake-ups) unless it fell more than a frame behind
+            now.QuadPart = now.QuadPart - due < period ? due : now.QuadPart;
+        }
+        last = now;
         uint32_t vb = ++g_vblank_count;
+        SetEvent(g_vblank_wake);
+        from_display += synced;
+        if (flush && vb % 3600 == 0) {
+            logf("[d3d] vblank: %u of the last 3600 from the display, %.3f Hz", from_display,
+                 3600.0 * f.QuadPart / (double)(now.QuadPart - minute.QuadPart));
+            from_display = 0;
+            minute = now;
+        }
         ksync_signal_object(g_dev + DEV_VBLANKEVENT);
         if (auto cb = *(void(__cdecl **)(uint32_t *))(g_dev + DEV_VBLANKCALLBACK)) {
             uint32_t data[3] = {vb, g_swap_count.load(), 0};
@@ -884,7 +926,7 @@ void pace_swap()
     if (n) {
         uint32_t target = last_vb + n, now = g_vblank_count.load();
         if (now >= target && !(iv & 0x80000000)) target = now + 1;
-        while (g_vblank_count.load() < target) Sleep(1);
+        while (g_vblank_count.load() < target) WaitForSingleObject(g_vblank_wake, 4); // Sleep(1) polling woke 0-2 ms late
     }
     uint32_t now_vb = g_vblank_count.load();
     perf::pace_end(now_vb - last_vb, n ? n : 1);
