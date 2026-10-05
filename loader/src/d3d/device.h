@@ -19,5 +19,6 @@ float scale_x();
 float scale_y();
 uint32_t host_w(uint32_t xbox_w);
 uint32_t host_h(uint32_t xbox_h);
+void request_render_change(); // the render-size settings in g_cfg changed (menu): applied after the next Swap
 
 } // namespace xd3d

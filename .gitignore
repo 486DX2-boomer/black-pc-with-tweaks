@@ -32,3 +32,6 @@ black.log
 
 # Local launcher shortcut (machine-specific; its icon comes from the user's XBE)
 *.lnk
+
+# Port settings written by the menu bar (machine-specific)
+black.ini

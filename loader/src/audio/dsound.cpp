@@ -428,8 +428,8 @@ void mix_block(float *out, std::vector<Completion> &done)
         mix_voice(*s, out, [&](float *f) { return stream_fetch(*s, f, done); });
     }
     if (g_cfg.reverb) {
-        static bool gain_set = (reverb::set_gain(g_cfg.reverb_gain), true);
-        (void)gain_set;
+        static float applied = -1.0f; // the menu can change the level while running
+        if (applied != g_cfg.reverb_gain) reverb::set_gain(applied = g_cfg.reverb_gain);
         reverb::process(g_send, out, audio_out::BLOCK);
     }
     // soft knee above 0.8 instead of hard clipping (the MCPX/DSP stages that set final levels are not emulated)

@@ -31,7 +31,10 @@ Open work on the BLACK PC port. Findings and addresses live in `NOTES.md`; this 
 - [ ] Resolution: better downsampling when the render size is much larger than the window (box filter instead of
       one bilinear tap).
 - [ ] Rebindable keys (a config file) if the in-game button remapping is not enough.
-- [ ] Remember gain/gamma, mouse sensitivity, window size/fullscreen between launches instead of only flags.
+- [x] Settings remembered between launches (black.ini: render size, AA, fps, aspect, fullscreen, gain/gamma, mouse, reverb).
+- [ ] Also remember the window size and position.
+- [x] Port options in a Windows menu bar (vanilla port). In-game Apt menu entries: later, when modifying the game
+      (scoping in NOTES.md, "Front end / custom menu options").
 
 ## Audio
 

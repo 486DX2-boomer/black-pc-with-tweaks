@@ -1,5 +1,8 @@
 #include "d3d/host.h"
 
+#include "d3d/menu.h"
+#include "settings.h"
+
 #include <algorithm>
 
 namespace host3d {
@@ -17,6 +20,7 @@ int g_aspect_w = 4, g_aspect_h = 3; // the picture's shape; the window keeps it 
 int g_bb_w, g_bb_h;                 // host back buffer: the largest monitor, so any window size is drawn 1:1
 int g_frame_w, g_frame_h;           // the part of the back buffer the current frame uses
 WINDOWPLACEMENT g_windowed_place = {sizeof(WINDOWPLACEMENT)};
+HMENU g_menu; // the menu bar (hidden in fullscreen)
 
 // Mouse: raw input counts and buttons, used only while the cursor is captured (click the window; focus loss
 // releases it). The click that captures is not passed to the game.
@@ -34,11 +38,15 @@ void toggle_fullscreen()
             !GetMonitorInfoW(MonitorFromWindow(g_hwnd, MONITOR_DEFAULTTOPRIMARY), &mi))
             return;
         SetWindowLongW(g_hwnd, GWL_STYLE, (style & ~WS_OVERLAPPEDWINDOW) | WS_POPUP);
+        SetMenu(g_hwnd, nullptr);
+        g_cfg.fullscreen = true;
         SetWindowPos(g_hwnd, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left,
                      mi.rcMonitor.bottom - mi.rcMonitor.top, SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
         logf("host: fullscreen %ldx%ld", mi.rcMonitor.right - mi.rcMonitor.left, mi.rcMonitor.bottom - mi.rcMonitor.top);
     } else {
         SetWindowLongW(g_hwnd, GWL_STYLE, (style & ~WS_POPUP) | WS_OVERLAPPEDWINDOW);
+        SetMenu(g_hwnd, g_menu);
+        g_cfg.fullscreen = false;
         SetWindowPlacement(g_hwnd, &g_windowed_place);
         SetWindowPos(g_hwnd, nullptr, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
@@ -130,8 +138,27 @@ LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     switch (msg) {
     case WM_CLOSE:
         g_closed = true;
+        settings_save(); // also what the F-keys changed
         request_exit(0, "window closed");
         return 0;
+    case WM_COMMAND:
+        if (HIWORD(wp) == 0) { // a menu item
+            UINT id = LOWORD(wp);
+            if (id == menu::ID_EXIT) PostMessageW(h, WM_CLOSE, 0, 0);
+            else if (id == menu::ID_FULLSCREEN) {
+                toggle_fullscreen();
+                settings_save();
+            } else if (id == menu::ID_RELEASE_MOUSE) capture_mouse(false);
+            else menu::command(h, id);
+            return 0;
+        }
+        break;
+    case WM_INITMENUPOPUP:
+        if (g_menu) menu::update(g_menu, !(GetWindowLongW(h, GWL_STYLE) & WS_OVERLAPPEDWINDOW));
+        break;
+    case WM_ENTERMENULOOP:
+        capture_mouse(false); // the cursor has to reach the menu
+        break;
     case WM_DESTROY:
         PostQuitMessage(0);
         return 0;
@@ -160,9 +187,13 @@ LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             toggle_fullscreen();
             return 0;
         }
+        if (wp == VK_ESCAPE) { // let go of the mouse (to reach the menu bar or other windows)
+            capture_mouse(false);
+            return 0;
+        }
         break;
     case WM_SYSCOMMAND:
-        if ((wp & 0xFFF0) == SC_KEYMENU) return 0; // Alt / F10 must not open the (absent) menu and stall input
+        if ((wp & 0xFFF0) == SC_KEYMENU) return 0; // Alt / F10 must not enter the menu bar by keyboard and stall input
         break;
     case WM_LBUTTONDOWN:
         capture_mouse(true);
@@ -197,9 +228,10 @@ DWORD WINAPI ui_thread(void *)
     RegisterClassW(&wc);
     RECT r = {0, 0, g_win_w, g_win_h};
     DWORD style = WS_OVERLAPPEDWINDOW;
-    AdjustWindowRect(&r, style, FALSE);
+    g_menu = menu::build();
+    AdjustWindowRect(&r, style, TRUE); // the client area keeps its size below the menu bar
     g_hwnd = CreateWindowExW(0, wc.lpszClassName, L"BLACK", style, CW_USEDEFAULT, CW_USEDEFAULT, r.right - r.left,
-                             r.bottom - r.top, nullptr, nullptr, wc.hInstance, nullptr);
+                             r.bottom - r.top, nullptr, g_menu, wc.hInstance, nullptr);
     RAWINPUTDEVICE mouse = {0x01, 0x02, 0, g_hwnd}; // generic desktop / mouse, while the window has focus
     if (!RegisterRawInputDevices(&mouse, 1, sizeof mouse)) logf("host: raw mouse input not available (%lu)", GetLastError());
     ShowWindow(g_hwnd, g_cfg.background ? SW_SHOWMINNOACTIVE : SW_SHOWNORMAL);

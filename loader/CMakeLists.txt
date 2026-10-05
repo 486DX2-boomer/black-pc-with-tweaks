@@ -26,6 +26,8 @@ add_library(blackrt SHARED
   src/timing.cpp
   src/input/mouselook.cpp
   src/audio/reverb.cpp
+  src/d3d/menu.cpp
+  src/settings.cpp
   src/sha1.cpp
   src/kernel/ktable.cpp
   src/kernel/k_memory.cpp

@@ -5,6 +5,7 @@
 #include "hooks.h"
 #include "image.h"
 #include "timing.h"
+#include "settings.h"
 #include "input/mouselook.h"
 #include "kernel/ktable.h"
 #include "kernel/xboxkrnl.h"
@@ -120,13 +121,14 @@ bool parse_args()
         else if (a == L"--strict") g_cfg.strict = true;
         else if (a == L"--multicore") g_cfg.multicore = true;
         else if (a == L"--skip-videos") g_cfg.skip_videos = true;
-        else if (a == L"--normal-aspect") g_cfg.widescreen = false;
-        else if (a == L"--fullscreen") g_cfg.fullscreen = true;
-        else if (a == L"--no-reverb") g_cfg.reverb = false;
+        else if (a == L"--normal-aspect") { g_cfg.widescreen = false; settings_mark_cli("widescreen"); }
+        else if (a == L"--fullscreen") { g_cfg.fullscreen = true; settings_mark_cli("fullscreen"); }
+        else if (a == L"--no-reverb") { g_cfg.reverb = false; settings_mark_cli("reverb"); }
         else if (a == L"--no-ramp") g_cfg.ramp = false;
-        else if (a == L"--no-aa") g_cfg.aa = false;
+        else if (a == L"--no-aa") { g_cfg.aa = false; settings_mark_cli("aa"); }
         else if (a == L"--rescale-at") { if (!next(g_cfg.rescale_at)) return false; }
         else if (a == L"--reverb-gain") {
+            settings_mark_cli("reverb_gain");
             std::wstring v;
             if (!next(v)) return false;
             g_cfg.reverb_gain = (float)_wtof(v.c_str());
@@ -141,27 +143,32 @@ bool parse_args()
             g_cfg.clip_seconds = (uint32_t)_wtoi(v.c_str());
         }
         else if (a == L"--fps") {
+            settings_mark_cli("fps");
             std::wstring v;
             if (!next(v)) return false;
             g_cfg.fps = _wtoi(v.c_str()) == 60 ? 60 : 30;
         }
         else if (a == L"--mouse-sens") {
+            settings_mark_cli("mouse_sens");
             std::wstring v;
             if (!next(v)) return false;
             g_cfg.mouse_sens = (float)_wtof(v.c_str());
             if (g_cfg.mouse_sens < 0.05f || g_cfg.mouse_sens > 50.0f) g_cfg.mouse_sens = 2.0f;
-        } else if (a == L"--mouse-invert") g_cfg.mouse_invert = true;
+        } else if (a == L"--mouse-invert") { g_cfg.mouse_invert = true; settings_mark_cli("mouse_invert"); }
         else if (a == L"--gamma") {
+            settings_mark_cli("gamma");
             std::wstring v;
             if (!next(v)) return false;
             g_cfg.gamma = (float)_wtof(v.c_str());
             if (g_cfg.gamma < 0.2f || g_cfg.gamma > 5.0f) g_cfg.gamma = 1.0f;
         } else if (a == L"--scale") {
+            settings_mark_cli("render");
             std::wstring v;
             if (!next(v)) return false;
             g_cfg.scale = (float)_wtof(v.c_str());
             if (g_cfg.scale < 0.5f || g_cfg.scale > 8.0f) g_cfg.scale = 3.0f;
         } else if (a == L"--resolution") {
+            settings_mark_cli("render");
             std::wstring v;
             if (!next(v)) return false;
             if (v == L"native") g_cfg.render_native = true;
@@ -181,6 +188,7 @@ bool parse_args()
             size_t x = v.find_first_of(L"xX");
             g_cfg.window_h = x == std::wstring::npos ? 0 : _wtoi(v.c_str() + x + 1); // 0: from the aspect
         } else if (a == L"--gain") {
+            settings_mark_cli("gain");
             std::wstring v;
             if (!next(v)) return false;
             g_cfg.gain = (float)_wtof(v.c_str());
@@ -233,6 +241,7 @@ bool parse_args()
     g_cfg.game_dir = slash == std::wstring::npos ? L"." : target.substr(0, slash);
     if (g_cfg.hdd_dir.empty()) g_cfg.hdd_dir = L"hdd";
     if (g_cfg.log_path.empty()) g_cfg.log_path = L"black.log";
+    settings_load(); // black.ini in the root folder; flags given above keep their values
     if (g_cfg.symbols_path.empty() && GetFileAttributesW(L"notes\\functions.csv") != INVALID_FILE_ATTRIBUTES)
         g_cfg.symbols_path = L"notes\\functions.csv";
     return true;

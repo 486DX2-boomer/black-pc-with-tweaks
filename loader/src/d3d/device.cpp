@@ -112,6 +112,7 @@ void surface_size(const PixelContainer *s, uint32_t *w, uint32_t *h)
 // into its 4:3 buffers (anamorphic), so the host targets are widened by 4/3 as well.
 float g_scale_x, g_scale_y; // set at CreateDevice (setup_render_scale), changed at run time by change_render_scale
 int g_native_w, g_native_h; // the picture size the native render size was made for
+std::atomic<bool> g_render_request{false}; // the menu changed the render-size settings
 D3DRECT g_scissor;          // the game's scissor rectangle (Xbox pixels) and whether it is on, to re-apply after a rescale
 bool g_scissor_on;
 
@@ -997,6 +998,8 @@ void change_render_scale(int pic_w, int pic_h)
     logf("[d3d] render size changed to %ux%u (x%.4g by x%.4g)", host_w(g_width), host_h(g_height), g_scale_x, g_scale_y);
 }
 
+void request_render_change() { g_render_request = true; }
+
 // After each Swap: F10 cycles the render size between 1, 1.5 and 2 x the window (switching to native mode),
 // and in native mode the render size follows the window once a resize has settled for 0.3 s.
 void check_render_size()
@@ -1021,6 +1024,14 @@ void check_render_size()
             if (comma == std::string::npos) break;
             pos = comma + 1;
         }
+    }
+    if (g_render_request.exchange(false)) { // the menu bar chose a render size
+        RECT frame, pic;
+        host3d::frame_layout(&frame, &pic);
+        g_native_w = pic.right - pic.left;
+        g_native_h = pic.bottom - pic.top;
+        change_render_scale(g_native_w, g_native_h);
+        return;
     }
     if (key_pressed(VK_F10, focus)) {
         if (!g_cfg.render_native) g_cfg.render_factor = 1.0f;
