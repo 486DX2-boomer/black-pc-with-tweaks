@@ -17,9 +17,9 @@ Open work on the BLACK PC port. Findings and addresses live in `NOTES.md`; this 
 - [ ] Window resizing at a fixed aspect, F11 fullscreen, black bars when maximised.
 - [x] Mouse look: rotates the view directly (user: "feels awesome").
 - [ ] Keyboard layout: the user's binding is in (see loader/README.md); confirm in play.
-- [ ] 60 fps (`--fps 60`, not the default): the world steps 1/60 s and moves at the right speed, audio is fine with
-      the thread separation, but **weapons fire too fast** (user) - the fire-rate code counts frames. Find it (watch the
-      ammo counter or the weapon's refire timer) and scale it, then check animations, AI, effects, scripted scenes.
+- [ ] 60 fps (`--fps 60`, not the default): world step 1/60 s, audio fine, weapon refire and reload blur now match
+      30 fps (measured). Check the rest in play: other weapons/fire modes, animations, AI, effects, scripted scenes;
+      decide whether 60 becomes the default.
 - [ ] Reverb (bin 11 send into an FDN reverb): level and character against the Xbox (`--reverb-gain`).
 
 ## Next

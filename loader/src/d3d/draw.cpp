@@ -811,7 +811,8 @@ void __stdcall D3DDevice_DrawIndexedVertices(uint32_t PrimitiveType, uint32_t Ve
         }
         uint32_t stride = convert_vertices(ctx.vs, mn, mx - mn + 1, nullptr, 0);
         debug_draw("DrawIndexedVertices", ctx, PrimitiveType, VertexCount, g_conv.data(), stride / 4);
-        if (debug_frame_active()) dump_packed_normal_geometry(ctx.vs, PrimitiveType, VertexCount, pIndexData, mn, mx);
+        if (debug_frame_active() && !g_cfg.debug_frame_end) // single debug frames only (ranges stay fast)
+            dump_packed_normal_geometry(ctx.vs, PrimitiveType, VertexCount, pIndexData, mn, mx);
         host3d::dev()->SetVertexDeclaration(decl_for(ctx.vs));
         // indices refer to vertex 0: point the data "mn vertices before" the converted block
         draw_indexed_up(PrimitiveType, VertexCount, pIndexData, (const uint8_t *)g_conv.data() - (size_t)mn * stride, stride);

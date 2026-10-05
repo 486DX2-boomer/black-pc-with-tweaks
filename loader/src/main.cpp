@@ -54,6 +54,7 @@ void usage()
            "  --reverb-gain K   room reverb level (default 1.0)\n"
            "  --background      (tests) start minimised without focus, audio muted\n"
            "  --wav <file>      record the audio output as a WAV file\n"
+           "  --rawvideo <file> record the picture as raw BGRX frames from --shot-start for --clip-seconds (default 4)\n"
            "  --mouse-sens K    mouse look sensitivity, K x 0.022 degrees per count (default 2.0; F3/F4 adjust live)\n"
            "  --mouse-invert    mouse forward looks down\n"
            "  --gain K          output gain after the game's gamma ramp (default 1.0; F5/F6 adjust live)\n"
@@ -100,6 +101,8 @@ bool parse_args()
             std::wstring v;
             if (!next(v)) return false;
             g_cfg.watch_pad = (unsigned)_wtoi(v.c_str());
+        } else if (a == L"--memdump") {
+            if (!next(g_cfg.memdump)) return false;
         } else if (a == L"--press") {
             if (!next(g_cfg.press_script)) return false;
         } else if (a == L"--debug-draws") {
@@ -126,6 +129,12 @@ bool parse_args()
         }
         else if (a == L"--background") g_cfg.background = true;
         else if (a == L"--wav") { if (!next(g_cfg.wav_path)) return false; }
+        else if (a == L"--rawvideo") { if (!next(g_cfg.rawvideo)) return false; }
+        else if (a == L"--clip-seconds") {
+            std::wstring v;
+            if (!next(v)) return false;
+            g_cfg.clip_seconds = (uint32_t)_wtoi(v.c_str());
+        }
         else if (a == L"--fps") {
             std::wstring v;
             if (!next(v)) return false;

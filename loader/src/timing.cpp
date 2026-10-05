@@ -8,6 +8,7 @@
 
 #include "common.h"
 
+#include <cmath>
 #include <cstring>
 
 namespace {
@@ -83,6 +84,7 @@ bool patch(const Patch &p)
 
 namespace {
 float g_frame_60 = 1.0f / 60.0f;
+float g_frame_30 = 1.0f / 30.0f;
 
 // A disp32/imm32 operand at `at` inside the instruction at `insn` (whose first bytes must match).
 struct Operand {
@@ -91,6 +93,63 @@ struct Operand {
     uint32_t at, old_value;
 };
 } // namespace
+
+// Weapon refire at 60 fps. FUN_001EEFD0 (weapon state machine, ebp = weapon user) fires when its timer
+// [ebp+0xDC] is <= 0 (FUN_001F0210 subtracts the frame time first) and then sets the timer to the weapon's
+// refire interval (e.g. 0.04 s). Checked once per frame, the interval is effectively rounded up to whole
+// frames: at 30 fps 0.04 s fires every 2nd frame (66 ms, ~15 shots/s), at 60 fps every 3rd (50 ms, ~20/s).
+// The original rate is the 30 fps rounding, so the interval is rounded up to whole 1/30 s steps (minus a
+// little, so the 4th 1/60 s frame fires and not the 5th).
+extern "C" uint32_t __cdecl refire_interval(uint32_t bits)
+{
+    float t;
+    memcpy(&t, &bits, 4);
+    if (t > 0.0f) t = ceilf(t * 30.0f - 1e-3f) / 30.0f - 0.0005f;
+    memcpy(&bits, &t, 4);
+    return bits;
+}
+
+#define REFIRE_THUNK(name, reg)                                                                                    \
+    __declspec(naked) void name()                                                                                  \
+    {                                                                                                              \
+        __asm pushad                                                                                               \
+        __asm push reg                                                                                             \
+        __asm call refire_interval                                                                                 \
+        __asm add esp, 4                                                                                           \
+        __asm mov dword ptr [ebp + 0xDC], eax                                                                      \
+        __asm popad                                                                                                \
+        __asm ret                                                                                                  \
+    }
+REFIRE_THUNK(refire_edx, edx)
+REFIRE_THUNK(refire_ecx, ecx)
+REFIRE_THUNK(refire_eax, eax)
+
+bool install_refire_patches()
+{
+    struct Site {
+        uint32_t addr;
+        uint8_t expect[6]; // mov [ebp+0DCh], reg
+        void (*thunk)();
+    } sites[] = {
+        {0x001EFC72, {0x89, 0x95, 0xDC, 0x00, 0x00, 0x00}, refire_edx}, // interval from the fire mode (+0xCC)
+        {0x001EFC94, {0x89, 0x8D, 0xDC, 0x00, 0x00, 0x00}, refire_ecx}, // interval (+0x20), main fire path
+        {0x001EFCA6, {0x89, 0x85, 0xDC, 0x00, 0x00, 0x00}, refire_eax}, // interval (+0x20), first shot
+        {0x001EFEF3, {0x89, 0x8D, 0xDC, 0x00, 0x00, 0x00}, refire_ecx}, // interval (+0x20), other fire path
+    };
+    for (const Site &s : sites)
+        if (memcmp((const void *)(uintptr_t)s.addr, s.expect, 6)) {
+            logf("timing: weapon refire site 0x%08x does not match this build", s.addr);
+            return false;
+        }
+    for (const Site &s : sites) { // call thunk; nop (the 6-byte store it replaces)
+        auto *code = (uint8_t *)(uintptr_t)s.addr;
+        code[0] = 0xE8;
+        int32_t rel = (int32_t)((uintptr_t)s.thunk - (s.addr + 5));
+        memcpy(code + 1, &rel, 4);
+        code[5] = 0x90;
+    }
+    return true;
+}
 
 bool install_60fps_patches()
 {
@@ -107,7 +166,20 @@ bool install_60fps_patches()
             return false;
         }
     for (const Operand &o : ops) *(uint32_t *)(uintptr_t)o.at = o.old_value == 0x21 ? 16u : frame;
-    logf("timing: world steps 1/60 s per frame (60 fps)");
+    bool refire = install_refire_patches();
+    // Reload blur (the post-process controller at *0x2D1990 + 0x830A0, mode 1): its hold time is set at
+    // 0x17B314 to reload-animation length [anim+0x1C] (in 30 fps animation frames) * frame time (game
+    // +0x2013C, = 1/60 now) * 0.5 - c, so it halved at 60 fps and the blur cleared early. Use 1/30 there.
+    static const uint8_t blur_expect[8] = {0xF3, 0x0F, 0x59, 0x82, 0x3C, 0x01, 0x02, 0x00}; // mulss xmm0, [edx+0x2013C]
+    auto *blur = (uint8_t *)(uintptr_t)0x0017B314;
+    if (!memcmp(blur, blur_expect, 8)) {
+        blur[3] = 0x05; // mulss xmm0, [disp32]
+        uint32_t a = (uint32_t)(uintptr_t)&g_frame_30;
+        memcpy(blur + 4, &a, 4);
+    } else {
+        logf("timing: reload blur site 0x0017B314 does not match this build");
+    }
+    logf("timing: world steps 1/60 s per frame (60 fps)%s", refire ? "; weapon refire keeps the 30 fps rhythm" : "");
     return true;
 }
 

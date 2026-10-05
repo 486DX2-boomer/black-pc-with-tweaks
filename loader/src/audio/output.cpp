@@ -54,7 +54,10 @@ bool open()
     HRESULT hr = create(&g_xa, 0, XAUDIO2_DEFAULT_PROCESSOR);
     if (SUCCEEDED(hr)) hr = g_xa->CreateMasteringVoice(&g_master, 2, RATE);
     if (SUCCEEDED(hr) && g_cfg.background) g_master->SetVolume(0.0f); // tests: keep the timing, not the sound
-    if (!g_cfg.wav_path.empty() && !_wfopen_s(&g_wav, g_cfg.wav_path.c_str(), L"wb")) wav_header();
+    if (!g_cfg.wav_path.empty() && !_wfopen_s(&g_wav, g_cfg.wav_path.c_str(), L"wb")) {
+        wav_header();
+        logf("[audio] recording the mix to a WAV file"); // its log time = the WAV's start, to line up captures
+    }
     WAVEFORMATEX wf = {};
     wf.wFormatTag = WAVE_FORMAT_IEEE_FLOAT;
     wf.nChannels = 2;

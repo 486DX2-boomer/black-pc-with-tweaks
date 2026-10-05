@@ -751,13 +751,90 @@ void pace_swap()
     last_vb = g_vblank_count.load();
 }
 
+// Debug (--memdump "[*]ADDR:SIZE:F1,F2"): save SIZE bytes at ADDR (or at the pointer stored at ADDR) at the
+// end of frames F1, F2... as mem_<frame>.bin in the --screenshot dir, to diff game state between frames.
+void memdump_frame(uint32_t frame)
+{
+    if (g_cfg.memdump.empty() || g_cfg.screenshot_dir.empty()) return;
+    std::string spec = narrow(g_cfg.memdump);
+    const char *q = spec.c_str();
+    bool deref = *q == '*';
+    if (deref) q++;
+    char *end = nullptr;
+    uint32_t addr = (uint32_t)strtoul(q, &end, 16), size = end && *end == ':' ? (uint32_t)strtoul(end + 1, &end, 16) : 0;
+    if (!size || !end || *end != ':') return;
+    bool hit = false;
+    for (const char *f = end + 1; *f;) {
+        if ((uint32_t)strtoul(f, (char **)&f, 10) == frame) hit = true;
+        if (*f == ',') f++;
+        else break;
+    }
+    if (!hit) return;
+    if (deref) addr = *(uint32_t *)(uintptr_t)addr;
+    CreateDirectoryW(g_cfg.screenshot_dir.c_str(), nullptr);
+    wchar_t name[64];
+    swprintf(name, 64, L"\\mem_%u.bin", frame);
+    FILE *fp = nullptr;
+    if (!_wfopen_s(&fp, (g_cfg.screenshot_dir + name).c_str(), L"wb")) {
+        fwrite((const void *)(uintptr_t)addr, 1, size, fp);
+        fclose(fp);
+        logf("[debug] memdump frame %u: %u bytes at %08x", frame, size, addr);
+    }
+}
+
+// Clips (--rawvideo FILE): from --shot-start seconds for --clip-seconds, the picture as shown in the window,
+// as raw BGRX frames (one per Swap). The picture is shrunk on the GPU into a small target first so the read
+// back stays cheap and the game keeps its frame rate; "[capture] first frame" in the log lines it up with --wav.
+void capture_frame()
+{
+    static FILE *fp;
+    static IDirect3DSurface9 *shrunk, *sys;
+    static uint32_t frames;
+    static bool done;
+    static ULONGLONG t0 = GetTickCount64();
+    if (g_cfg.rawvideo.empty() || done) return;
+    ULONGLONG ms = GetTickCount64() - t0, from = g_cfg.shot_start * 1000ull;
+    if (ms < from) return;
+    if (ms > from + g_cfg.clip_seconds * 1000ull) {
+        if (fp) fclose(fp);
+        fp = nullptr;
+        done = true;
+        logf("[capture] %u frames written", frames);
+        return;
+    }
+    RECT frame, pic;
+    host3d::frame_layout(&frame, &pic);
+    UINT w = (UINT)(pic.right - pic.left) & ~1u, h = (UINT)(pic.bottom - pic.top) & ~1u; // even sizes for video encoders
+    IDirect3DDevice9 *d = host3d::dev();
+    if (!shrunk) {
+        if (FAILED(d->CreateRenderTarget(w, h, D3DFMT_X8R8G8B8, D3DMULTISAMPLE_NONE, 0, FALSE, &shrunk, nullptr)) ||
+            FAILED(d->CreateOffscreenPlainSurface(w, h, D3DFMT_X8R8G8B8, D3DPOOL_SYSTEMMEM, &sys, nullptr)) ||
+            _wfopen_s(&fp, g_cfg.rawvideo.c_str(), L"wb")) {
+            done = true;
+            logf("[capture] could not start");
+            return;
+        }
+        logf("[capture] %ux%u BGRX frames at %d fps to %s", w, h, g_cfg.fps, narrow(g_cfg.rawvideo).c_str());
+    }
+    RECT src = {pic.left, pic.top, pic.left + (LONG)w, pic.top + (LONG)h};
+    d->StretchRect(g_host_backbuffer, &src, shrunk, nullptr, D3DTEXF_POINT);
+    D3DLOCKED_RECT lr;
+    if (SUCCEEDED(d->GetRenderTargetData(shrunk, sys)) && SUCCEEDED(sys->LockRect(&lr, nullptr, D3DLOCK_READONLY))) {
+        for (UINT y = 0; y < h; y++) fwrite((const uint8_t *)lr.pBits + y * lr.Pitch, 4, w, fp);
+        sys->UnlockRect();
+        if (++frames == 1) logf("[capture] first frame");
+    }
+}
+
 uint32_t __stdcall D3DDevice_Swap(uint32_t Flags)
 {
     DTRACE("0x%x", Flags);
     pb_flush();
     pace_swap();
     present_backbuffer();
+    capture_frame();
     uint32_t frames = ++g_frame_count;
+    memdump_frame(frames);
     { // F12 in the game window: dump the next frame (draw log + render targets) for bug reports
         static bool f12_down;
         bool down = GetForegroundWindow() == host3d::window() && (GetAsyncKeyState(VK_F12) & 0x8000);

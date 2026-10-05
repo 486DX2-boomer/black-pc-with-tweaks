@@ -67,6 +67,8 @@ struct Config {
     float reverb_gain = 1.0f;  // --reverb-gain: overall reverb level
     bool background = false;   // --background (tests): window minimised without focus, audio muted
     std::wstring wav_path;     // --wav: record the mixer output (16-bit stereo 48 kHz)
+    std::wstring rawvideo;     // --rawvideo: the shown picture as raw BGRX frames (from --shot-start, --clip-seconds)
+    uint32_t clip_seconds = 4;
     // Output gain after the game's gamma ramp (F5/F6 adjust it live). The ramp (d3d/device.cpp, ramp_texture)
     // already doubles the framebuffer like the Xbox's video DAC did (BLACK's art uses 0x80 = full brightness).
     float gain = 1.0f;
@@ -81,6 +83,7 @@ struct Config {
     unsigned debug_draws = 0;  // --debug-draws: describe the first N draws
     unsigned debug_frame = 0;  // --debug-frame: describe every draw of this frame
     std::wstring press_script; // --press: "frame:button,frame:button" scripted controller input
+    std::wstring memdump;      // --memdump [*]ADDR:SIZE:F1,F2,...: raw memory to the --screenshot dir at those frames
     unsigned watch_pad = 0;    // --watch-pad N: from frame N, log game code that reads the right stick (DR3)
     uint32_t watch_read = 0;   // --watch-read [w][*]ADDR[+OFF]: with --watch-pad, watch these 4 bytes instead
     uint32_t watch_read_off = 0; // (* = ADDR holds a pointer, read when the watch starts; w = writes only)
