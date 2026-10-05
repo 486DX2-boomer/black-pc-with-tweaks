@@ -59,6 +59,7 @@ void usage()
            "  --mouse-invert    mouse forward looks down\n"
            "  --gain K          output gain after the game's gamma ramp (default 1.0; F5/F6 adjust live)\n"
            "  --no-ramp         ignore the game's gamma ramp (no fades, half brightness: the raw framebuffer)\n"
+           "  --no-aa           no anti-aliasing (default: edge-directed post filter; F9 toggles)\n"
            "  --force           run an XBE other than the known NTSC-U build\n");
 }
 
@@ -121,6 +122,7 @@ bool parse_args()
         else if (a == L"--fullscreen") g_cfg.fullscreen = true;
         else if (a == L"--no-reverb") g_cfg.reverb = false;
         else if (a == L"--no-ramp") g_cfg.ramp = false;
+        else if (a == L"--no-aa") g_cfg.aa = false;
         else if (a == L"--reverb-gain") {
             std::wstring v;
             if (!next(v)) return false;

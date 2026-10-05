@@ -169,11 +169,11 @@ HostZ &host_z(const PixelContainer *z, uint32_t rt_w, uint32_t rt_h, uint64_t *k
     return hz;
 }
 
-IDirect3DPixelShader9 *compile_ps(const char *src, const char *name)
+IDirect3DPixelShader9 *compile_ps(const char *src, const char *name, const char *profile = "ps_2_0")
 {
     IDirect3DPixelShader9 *ps = nullptr;
     ID3DBlob *code = nullptr, *errors = nullptr;
-    if (SUCCEEDED(D3DCompile(src, strlen(src), name, nullptr, nullptr, "main", "ps_2_0", 0, 0, &code, &errors)))
+    if (SUCCEEDED(D3DCompile(src, strlen(src), name, nullptr, nullptr, "main", profile, 0, 0, &code, &errors)))
         host3d::dev()->CreatePixelShader((const DWORD *)code->GetBufferPointer(), &ps);
     else
         logf("[d3d] %s shader: %s", name, errors ? (const char *)errors->GetBufferPointer() : "?");
@@ -301,6 +301,72 @@ const char kGammaPS[] = "sampler2D f : register(s0);\n"
 IDirect3DPixelShader9 *g_gamma_ps;
 IDirect3DTexture9 *g_ramp_tex;
 
+// Anti-aliasing: an edge-directed post filter on the final picture (after the gamma ramp, at render
+// resolution, before the scale to the window), written for this project after the published FXAA idea.
+// MSAA does not fit this game: its depth-of-field and blur passes read the depth buffer back as a texture
+// (not possible for multisampled depth in Direct3D 9) and it re-reads its own render targets.
+// Per pixel: luma contrast against the 4 neighbours decides whether there is an edge; the 3x3 second
+// derivatives pick horizontal or vertical; the edge is walked both ways (fixed steps, branch-free for
+// ps_2_a) to where the luma leaves the edge's average; the pixel is then sampled shifted across the edge in
+// proportion to its position along it (plus a sub-pixel term for isolated pixels).
+const char kFxaaPS[] =
+    "sampler2D s : register(s0);\n"
+    "float4 rcp : register(c0);\n" // x = 1/width, y = 1/height
+    "float L(float2 uv) { return dot(tex2D(s, uv).rgb, float3(0.299, 0.587, 0.114)); }\n"
+    "float4 main(float2 uv : TEXCOORD0) : COLOR0 {\n"
+    "  float3 cM = tex2D(s, uv).rgb;\n"
+    "  float lM = dot(cM, float3(0.299, 0.587, 0.114));\n"
+    "  float lN = L(uv + float2(0, -rcp.y)), lS = L(uv + float2(0, rcp.y));\n"
+    "  float lW = L(uv + float2(-rcp.x, 0)), lE = L(uv + float2(rcp.x, 0));\n"
+    "  float lMin = min(lM, min(min(lN, lS), min(lW, lE))), lMax = max(lM, max(max(lN, lS), max(lW, lE)));\n"
+    "  float range = lMax - lMin;\n"
+    "  float lNW = L(uv + float2(-rcp.x, -rcp.y)), lNE = L(uv + float2(rcp.x, -rcp.y));\n"
+    "  float lSW = L(uv + float2(-rcp.x, rcp.y)), lSE = L(uv + float2(rcp.x, rcp.y));\n"
+    "  float edgeH = abs(lNW + lSW - 2 * lW) + 2 * abs(lN + lS - 2 * lM) + abs(lNE + lSE - 2 * lE);\n"
+    "  float edgeV = abs(lNW + lNE - 2 * lN) + 2 * abs(lW + lE - 2 * lM) + abs(lSW + lSE - 2 * lS);\n"
+    "  bool horz = edgeH >= edgeV;\n"
+    "  float l1 = horz ? lN : lW, l2 = horz ? lS : lE;\n"
+    "  float g1 = l1 - lM, g2 = l2 - lM;\n"
+    "  bool steep1 = abs(g1) >= abs(g2);\n"
+    "  float gScaled = 0.25 * max(abs(g1), abs(g2));\n"
+    "  float stepLen = horz ? rcp.y : rcp.x;\n"
+    "  stepLen = steep1 ? -stepLen : stepLen;\n"
+    "  float lAvg = 0.5 * ((steep1 ? l1 : l2) + lM);\n"
+    "  float2 cuv = uv + (horz ? float2(0, stepLen * 0.5) : float2(stepLen * 0.5, 0));\n"
+    "  float2 off = horz ? float2(rcp.x, 0) : float2(0, rcp.y);\n"
+    "  float2 uv1 = cuv - off, uv2 = cuv + off;\n"
+    "  float e1 = L(uv1) - lAvg, e2 = L(uv2) - lAvg;\n"
+    "  bool done1 = abs(e1) >= gScaled, done2 = abs(e2) >= gScaled;\n"
+    "  const float Q[7] = {1, 1, 1.5, 2, 2, 4, 8};\n"
+    "  [unroll] for (int i = 0; i < 7; i++) {\n"
+    "    float2 n1 = uv1 - off * Q[i], n2 = uv2 + off * Q[i];\n"
+    "    float t1 = L(n1) - lAvg, t2 = L(n2) - lAvg;\n"
+    "    uv1 = done1 ? uv1 : n1; e1 = done1 ? e1 : t1; done1 = done1 || abs(e1) >= gScaled;\n"
+    "    uv2 = done2 ? uv2 : n2; e2 = done2 ? e2 : t2; done2 = done2 || abs(e2) >= gScaled;\n"
+    "  }\n"
+    "  float d1 = horz ? uv.x - uv1.x : uv.y - uv1.y, d2 = horz ? uv2.x - uv.x : uv2.y - uv.y;\n"
+    "  bool dir1 = d1 < d2;\n"
+    "  float pixOff = 0.5 - min(d1, d2) / (d1 + d2);\n"
+    "  bool correct = ((dir1 ? e1 : e2) < 0.0) != (lM < lAvg);\n"
+    "  float fOff = correct ? pixOff : 0.0;\n"
+    "  float lA = (2 * (lN + lS + lW + lE) + lNW + lNE + lSW + lSE) / 12.0;\n"
+    "  float sp = saturate(abs(lA - lM) / max(range, 1e-4));\n"
+    "  sp = (-2 * sp + 3) * sp * sp;\n"
+    "  fOff = max(fOff, sp * sp * 0.75);\n"
+    "  float2 fuv = uv + (horz ? float2(0, fOff * stepLen) : float2(fOff * stepLen, 0));\n"
+    "  float3 c = tex2D(s, fuv).rgb;\n"
+    "  return float4(range < max(0.0312, lMax * 0.125) ? cM : c, 1);\n" // no edge: leave the pixel alone
+    "}\n";
+IDirect3DPixelShader9 *g_fxaa_ps;
+IDirect3DTexture9 *g_aa_tex[2]; // render-resolution intermediates: after the ramp, after the filter
+
+IDirect3DTexture9 *aa_target(int i, uint32_t w, uint32_t h)
+{
+    if (!g_aa_tex[i])
+        host3d::dev()->CreateTexture(w, h, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &g_aa_tex[i], nullptr);
+    return g_aa_tex[i];
+}
+
 // The ramp texture from the game's current gamma ramp (identity until the game has written one).
 IDirect3DTexture9 *ramp_texture()
 {
@@ -354,15 +420,21 @@ void present_backbuffer()
     if (key_pressed(VK_F6, focus)) g_cfg.gain = std::min(3.0f, g_cfg.gain + 0.1f);
     if (key_pressed(VK_F7, focus)) g_cfg.gamma = std::max(0.5f, g_cfg.gamma - 0.1f);
     if (key_pressed(VK_F8, focus)) g_cfg.gamma = std::min(3.0f, g_cfg.gamma + 0.1f);
-    if (shown_gamma != g_cfg.gamma || shown_gain != g_cfg.gain || shown_sens != g_cfg.mouse_sens) {
+    if (key_pressed(VK_F9, focus)) g_cfg.aa = !g_cfg.aa;
+    static int shown_aa = -1;
+    if (shown_gamma != g_cfg.gamma || shown_gain != g_cfg.gain || shown_sens != g_cfg.mouse_sens || shown_aa != (int)g_cfg.aa) {
         shown_gamma = g_cfg.gamma;
         shown_gain = g_cfg.gain;
         shown_sens = g_cfg.mouse_sens;
-        char title[200];
-        snprintf(title, sizeof title, "%sBLACK - mouse %.2f (F3/F4), gain %.1f (F5/F6), gamma %.1f (F7/F8), F11 fullscreen",
-                 g_cfg.background ? "[AUTOMATED TEST, MUTED] " : "", g_cfg.mouse_sens, g_cfg.gain, g_cfg.gamma);
+        shown_aa = g_cfg.aa;
+        char title[220];
+        snprintf(title, sizeof title,
+                 "%sBLACK - mouse %.2f (F3/F4), gain %.1f (F5/F6), gamma %.1f (F7/F8), AA %s (F9), F11 fullscreen",
+                 g_cfg.background ? "[AUTOMATED TEST, MUTED] " : "", g_cfg.mouse_sens, g_cfg.gain, g_cfg.gamma,
+                 g_cfg.aa ? "on" : "off");
         host3d::set_title(title);
-        logf("[d3d] mouse sensitivity %.2f, output gain %.1f, gamma %.1f", g_cfg.mouse_sens, g_cfg.gain, g_cfg.gamma);
+        logf("[d3d] mouse sensitivity %.2f, output gain %.1f, gamma %.1f, anti-aliasing %s", g_cfg.mouse_sens, g_cfg.gain,
+             g_cfg.gamma, g_cfg.aa ? "on" : "off");
     }
     HostRT &bb = host_rt(g_backbuffer);
     IDirect3DSurface9 *s = nullptr;
@@ -376,7 +448,24 @@ void present_backbuffer()
     host3d::frame_layout(&frame, &pic);
     if (pic.left > 0 || pic.top > 0 || pic.right < frame.right || pic.bottom < frame.bottom)
         host3d::dev()->ColorFill(g_host_backbuffer, &frame, 0);
-    if (g_gamma_ps && ramp) {
+    if (g_cfg.aa && !g_fxaa_ps) {
+        g_fxaa_ps = compile_ps(kFxaaPS, "fxaa", "ps_2_a");
+        if (!g_fxaa_ps) g_cfg.aa = false;
+    }
+    IDirect3DTexture9 *aa0 = g_cfg.aa ? aa_target(0, bb.w, bb.h) : nullptr, *aa1 = g_cfg.aa ? aa_target(1, bb.w, bb.h) : nullptr;
+    if (g_gamma_ps && ramp && aa0 && aa1) {
+        // ramp + gamma 1:1 into aa0, anti-alias 1:1 into aa1, then filter into the window
+        float c[4] = {1.0f / g_cfg.gamma, g_cfg.gain, 0, 0};
+        IDirect3DSurface9 *s0 = nullptr, *s1 = nullptr;
+        aa0->GetSurfaceLevel(0, &s0);
+        aa1->GetSurfaceLevel(0, &s1);
+        fullscreen_pass(g_gamma_ps, bb.tex, s0, nullptr, bb.w, bb.h, false, c, false, nullptr, ramp);
+        float r[4] = {1.0f / bb.w, 1.0f / bb.h, 0, 0};
+        fullscreen_pass(g_fxaa_ps, aa0, s1, nullptr, bb.w, bb.h, false, r, true);
+        host3d::dev()->StretchRect(s1, nullptr, g_host_backbuffer, &pic, D3DTEXF_LINEAR);
+        s0->Release();
+        s1->Release();
+    } else if (g_gamma_ps && ramp) {
         float c[4] = {1.0f / g_cfg.gamma, g_cfg.gain, 0, 0};
         fullscreen_pass(g_gamma_ps, bb.tex, g_host_backbuffer, nullptr, (uint32_t)frame.right, (uint32_t)frame.bottom, false, c,
                         true, &pic, ramp);
