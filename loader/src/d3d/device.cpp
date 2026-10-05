@@ -8,6 +8,7 @@
 #include "d3d/host.h"
 #include "d3d/nv2a_psh.h"
 #include "d3d/pshader.h"
+#include "perf.h"
 #include "d3d/pushbuf.h"
 #include "d3d/state.h"
 #include "d3d/vshader.h"
@@ -452,10 +453,15 @@ void present_backbuffer()
     if (key_pressed(VK_F7, focus)) g_cfg.gamma = std::max(0.5f, g_cfg.gamma - 0.1f);
     if (key_pressed(VK_F8, focus)) g_cfg.gamma = std::min(3.0f, g_cfg.gamma + 0.1f);
     if (key_pressed(VK_F9, focus)) g_cfg.aa = !g_cfg.aa;
+    if (key_pressed(VK_F2, focus)) perf::toggle();
     static int shown_aa = -1;
     static uint32_t shown_rh;
+    static char shown_tag[96];
+    char tag[96];
+    perf::title_tag(tag, sizeof tag);
     if (shown_gamma != g_cfg.gamma || shown_gain != g_cfg.gain || shown_sens != g_cfg.mouse_sens || shown_aa != (int)g_cfg.aa ||
-        shown_rh != host_h(g_height) * 65536 + host_w(g_width)) {
+        shown_rh != host_h(g_height) * 65536 + host_w(g_width) || strcmp(tag, shown_tag)) {
+        strcpy_s(shown_tag, tag);
         shown_rh = host_h(g_height) * 65536 + host_w(g_width);
         shown_gamma = g_cfg.gamma;
         shown_gain = g_cfg.gain;
@@ -463,12 +469,13 @@ void present_backbuffer()
         shown_aa = g_cfg.aa;
         char title[260];
         snprintf(title, sizeof title,
-                 "%sBLACK - mouse %.2f (F3/F4), gain %.1f (F5/F6), gamma %.1f (F7/F8), AA %s (F9), render %ux%u (F10), F11 fullscreen",
-                 g_cfg.background ? "[AUTOMATED TEST, MUTED] " : "", g_cfg.mouse_sens, g_cfg.gain, g_cfg.gamma,
+                 "%s%sBLACK - mouse %.2f (F3/F4), gain %.1f (F5/F6), gamma %.1f (F7/F8), AA %s (F9), render %ux%u (F10), F11 fullscreen",
+                 g_cfg.background ? "[AUTOMATED TEST, MUTED] " : "", tag, g_cfg.mouse_sens, g_cfg.gain, g_cfg.gamma,
                  g_cfg.aa ? "on" : "off", host_w(g_width), host_h(g_height));
         host3d::set_title(title);
-        logf("[d3d] mouse sensitivity %.2f, output gain %.1f, gamma %.1f, anti-aliasing %s", g_cfg.mouse_sens, g_cfg.gain,
-             g_cfg.gamma, g_cfg.aa ? "on" : "off");
+        if (!tag[0] || !strncmp(tag, "REC 0 ", 6))
+            logf("[d3d] mouse sensitivity %.2f, output gain %.1f, gamma %.1f, anti-aliasing %s", g_cfg.mouse_sens, g_cfg.gain,
+                 g_cfg.gamma, g_cfg.aa ? "on" : "off");
     }
     HostRT &bb = host_rt(g_backbuffer);
     IDirect3DSurface9 *s = nullptr;
@@ -548,6 +555,8 @@ void bind_render_target(Surface *rt, Surface *z)
 // Copy a render target texture (outside the scene) into a same-size scratch texture.
 IDirect3DTexture9 *snapshot_of(IDirect3DTexture9 *src)
 {
+    perf::Scope perf_scope(perf::kRtCopy);
+    perf::add_rt_copy();
     D3DSURFACE_DESC desc;
     src->GetLevelDesc(0, &desc);
     IDirect3DTexture9 *&snap = g_snapshots[mem_key(0, desc.Width, desc.Height)];
@@ -877,7 +886,9 @@ void pace_swap()
         if (now >= target && !(iv & 0x80000000)) target = now + 1;
         while (g_vblank_count.load() < target) Sleep(1);
     }
-    last_vb = g_vblank_count.load();
+    uint32_t now_vb = g_vblank_count.load();
+    perf::pace_end(now_vb - last_vb, n ? n : 1);
+    last_vb = now_vb;
 }
 
 // Debug (--memdump "[*]ADDR:SIZE:F1,F2"): save SIZE bytes at ADDR (or at the pointer stored at ADDR) at the
@@ -1061,6 +1072,7 @@ uint32_t __stdcall D3DDevice_Swap(uint32_t Flags)
 {
     DTRACE("0x%x", Flags);
     pb_flush();
+    perf::swap_begin();
     pace_swap();
     present_backbuffer();
     capture_frame();
@@ -1091,6 +1103,7 @@ uint32_t __stdcall D3DDevice_Swap(uint32_t Flags)
     }
     host3d::present();
     check_render_size();
+    perf::frame_end(host_w(g_width), host_h(g_height));
     dev_field<uint32_t>(DEV_SWAPCOUNT)++;
     g_swap_count++;
     if (frames % 60 == 0 || frames < 4)

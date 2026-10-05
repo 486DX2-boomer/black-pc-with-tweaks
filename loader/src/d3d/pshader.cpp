@@ -1,6 +1,7 @@
 #include "d3d/pshader.h"
 
 #include "d3d/host.h"
+#include "perf.h"
 #include "d3d/nv2a_psh.h"
 #include "d3d/state.h"
 
@@ -67,11 +68,20 @@ IDirect3DPixelShader9 *ps_host_shader()
         if (!(i >= 10 && i <= 25) && i != 43 && i != 44) key[n++] = rs[i];
     key[n++] = def.PSTextureModes;
     key[n++] = cube;
+    static uint32_t last_key[48], last_n;
+    static IDirect3DPixelShader9 *last_ps;
+    if (n == last_n && !memcmp(key, last_key, n * 4)) return last_ps; // most draws keep the previous shader
     std::string k((const char *)key, n * 4);
     auto it = g_cache.find(k);
-    if (it != g_cache.end()) return it->second;
+    if (it != g_cache.end()) {
+        memcpy(last_key, key, n * 4);
+        last_n = n;
+        return last_ps = it->second;
+    }
 
     std::string hlsl = psh_to_hlsl(def, cube);
+    perf::Scope perf_scope(perf::kCompile);
+    perf::add_compile();
     ID3DBlob *code = nullptr, *errors = nullptr;
     HRESULT hr = E_FAIL;
     for (const char *profile : {"ps_2_0", "ps_2_a", "ps_2_b"}) {
@@ -97,7 +107,9 @@ IDirect3DPixelShader9 *ps_host_shader()
     if (code) code->Release();
     if (errors) errors->Release();
     g_cache[k] = ps; // failures are cached too (drawn with the fallback)
-    return ps;
+    memcpy(last_key, key, n * 4);
+    last_n = n;
+    return last_ps = ps;
 }
 
 void upload_ps_constants(IDirect3DDevice9 *d)

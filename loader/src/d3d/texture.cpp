@@ -1,10 +1,12 @@
 // Xbox textures -> host textures. Swizzled (Morton order) and linear layouts are decoded on the CPU into
 // A8R8G8B8, DXT data is uploaded as is. Host copies are cached per resource header and re-uploaded when
-// the header changes, the game locks the texture, or a sampled hash of the texel data changes.
+// the header changes, the game locks the texture, or a sampled hash of the texel data changes (checked at the
+// first use in a frame; later binds in the same frame reuse the result).
 #include "d3d/device.h"
 #include "d3d/dispatch.h"
 #include "d3d/host.h"
 #include "d3d/state.h"
+#include "perf.h"
 
 #include <cstring>
 #include <unordered_map>
@@ -19,6 +21,7 @@ struct Entry {
     const void *palette = nullptr;
     uint32_t hash = 0;
     bool dirty = false;
+    uint32_t checked_frame = ~0u; // the frame the contents were last checked (hashing on every bind cost ~8 ms a frame)
 };
 
 std::unordered_map<const Resource *, Entry> g_cache;
@@ -308,9 +311,18 @@ uint32_t texture_level_offset(const PixelContainer *pc, uint32_t face, uint32_t 
 IDirect3DBaseTexture9 *host_texture(Resource *r, Palette *pal)
 {
     if (!r || !r->Data) return nullptr;
+    perf::Scope perf_scope(perf::kTexture);
     auto *pc = (PixelContainer *)r;
     EnterCriticalSection(&g_cs);
     Entry &e = g_cache[r];
+    uint32_t frame = g_frame_count.load(std::memory_order_relaxed);
+    if (e.tex && e.checked_frame == frame && !e.dirty && e.data == pc->Data && e.format == pc->Format && e.size == pc->Size &&
+        e.palette == (pal ? phys_to_virt(pal->Data) : nullptr)) {
+        IDirect3DBaseTexture9 *t = e.tex;
+        LeaveCriticalSection(&g_cs);
+        return t;
+    }
+    e.checked_frame = frame;
     uint32_t bytes = total_bytes(pc);
     uint32_t hash = sample_hash((const uint8_t *)phys_to_virt(pc->Data), bytes);
     const void *palptr = pal ? phys_to_virt(pal->Data) : nullptr;
@@ -319,6 +331,7 @@ IDirect3DBaseTexture9 *host_texture(Resource *r, Palette *pal)
     bool stale = !same_shape || e.dirty || e.hash != hash || (fmt_of(pc) == XFMT_P8 && e.palette != palptr);
     if (stale && same_shape) { // contents changed (video frames, render-to-memory): refill in place
         refill(e.tex, r, pal);
+        perf::add_texture_upload(bytes);
         e.palette = palptr;
         e.hash = hash;
         e.dirty = false;
@@ -327,6 +340,7 @@ IDirect3DBaseTexture9 *host_texture(Resource *r, Palette *pal)
     if (stale) {
         if (e.tex) e.tex->Release();
         e.tex = create_and_upload(r, pal);
+        perf::add_texture_upload(bytes);
         e.data = pc->Data;
         e.format = pc->Format;
         e.size = pc->Size;

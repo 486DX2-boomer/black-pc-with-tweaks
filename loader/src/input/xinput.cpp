@@ -216,9 +216,16 @@ void read_pad(uint32_t port, XGamepad &g)
 {
     memset(&g, 0, sizeof g);
     if (port != 0) return;
+    static uint32_t polls, absent[4]; // absent: the poll count when a slot was last found empty
+    polls++;
     for (DWORD i = 0; g_pc_get && i < 4; i++) {
+        if (absent[i] && polls - absent[i] < 120) continue;
         PcState pc = {};
-        if (g_pc_get(i, &pc) != ERROR_SUCCESS) continue;
+        if (g_pc_get(i, &pc) != ERROR_SUCCESS) {
+            absent[i] = polls;
+            continue;
+        }
+        absent[i] = 0;
         const PcGamepad &p = pc.Gamepad;
         g.wButtons |= p.wButtons & 0x00FF; // D-pad, START, BACK, thumb clicks map 1:1
         if (p.wButtons & 0x1000) g.bAnalogButtons[0] = 255; // A

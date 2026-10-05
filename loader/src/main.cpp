@@ -65,6 +65,7 @@ void usage()
            "  --gain K          output gain after the game's gamma ramp (default 1.0; F5/F6 adjust live)\n"
            "  --no-ramp         ignore the game's gamma ramp (no fades, half brightness: the raw framebuffer)\n"
            "  --no-aa           no anti-aliasing (default: edge-directed post filter; F9 toggles)\n"
+           "  --perf-at S:D     record performance (like F2) for D seconds from S seconds after the first frame\n"
            "  --force           run an XBE other than the known NTSC-U build\n");
 }
 
@@ -158,6 +159,9 @@ bool parse_args()
             if (g_cfg.mouse_sens < 0.05f || g_cfg.mouse_sens > 50.0f) g_cfg.mouse_sens = 2.0f;
         } else if (a == L"--mouse-invert") { g_cfg.mouse_invert = true; settings_mark_cli("mouse_invert"); }
         else if (a == L"--no-autoaim") { g_cfg.autoaim = false; settings_mark_cli("autoaim"); }
+        else if (a == L"--perf-at") {
+            if (!next(g_cfg.perf_at)) return false;
+        }
         else if (a == L"--gamma") {
             settings_mark_cli("gamma");
             std::wstring v;

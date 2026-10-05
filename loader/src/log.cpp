@@ -105,6 +105,17 @@ void symbols_load(const std::wstring &csv_path)
     logf("symbols: %zu functions from %s", g_syms.size(), narrow(csv_path).c_str());
 }
 
+bool sym_function(uint32_t addr, std::string *name, uint32_t *start)
+{
+    auto it = g_syms.upper_bound(addr);
+    if (it == g_syms.begin()) return false;
+    --it;
+    if (addr - it->first >= std::max<uint32_t>(it->second.second, 1) + 16) return false;
+    *name = it->second.first;
+    *start = it->first;
+    return true;
+}
+
 std::string sym_name(uint32_t addr)
 {
     char buf[160];

@@ -2,6 +2,7 @@
 
 #include "d3d/menu.h"
 #include "settings.h"
+#include "perf.h"
 
 #include <algorithm>
 
@@ -153,6 +154,10 @@ LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             return 0;
         }
         break;
+    case perf::WM_APP_PERF:
+        capture_mouse(false);
+        menu::perf_report(h, (GetWindowLongW(h, GWL_STYLE) & WS_OVERLAPPEDWINDOW) != 0);
+        return 0;
     case WM_INITMENUPOPUP:
         if (g_menu) menu::update(g_menu, !(GetWindowLongW(h, GWL_STYLE) & WS_OVERLAPPEDWINDOW));
         break;
@@ -219,6 +224,9 @@ LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 
 DWORD WINAPI ui_thread(void *)
 {
+    using SetDesc = HRESULT(WINAPI *)(HANDLE, PCWSTR);
+    if (auto set_desc = (SetDesc)GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "SetThreadDescription"))
+        set_desc(GetCurrentThread(), L"window (messages, raw mouse)");
     WNDCLASSW wc = {};
     wc.lpfnWndProc = wndproc;
     wc.hInstance = GetModuleHandleW(L"blackrt.dll");

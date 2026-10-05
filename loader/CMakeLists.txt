@@ -29,6 +29,7 @@ add_library(blackrt SHARED
   src/audio/reverb.cpp
   src/d3d/menu.cpp
   src/settings.cpp
+  src/perf.cpp
   src/sha1.cpp
   src/kernel/ktable.cpp
   src/kernel/k_memory.cpp
@@ -57,7 +58,7 @@ add_library(blackrt SHARED
 target_include_directories(blackrt PRIVATE src)
 target_compile_definitions(blackrt PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS UNICODE _UNICODE)
 target_compile_options(blackrt PRIVATE /W3 /utf-8 /EHsc)
-target_link_libraries(blackrt PRIVATE ntdll bcrypt d3d9 d3dcompiler windowscodecs ole32 user32 gdi32 winmm)
+target_link_libraries(blackrt PRIVATE ntdll bcrypt d3d9 d3dcompiler windowscodecs ole32 user32 gdi32 winmm dbghelp advapi32 shell32)
 # Xbox SEH handlers run through the same fs:[0] chain; no SafeSEH tables anywhere in the process.
 target_link_options(blackrt PRIVATE /SAFESEH:NO)
 

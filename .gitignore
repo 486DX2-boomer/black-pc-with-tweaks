@@ -35,3 +35,6 @@ black.log
 
 # Port settings written by the menu bar (machine-specific)
 black.ini
+
+# Performance recordings (Tools > Record performance, F2): machine-specific, may show game function names
+perf/

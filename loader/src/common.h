@@ -89,6 +89,7 @@ struct Config {
     unsigned debug_draws = 0;  // --debug-draws: describe the first N draws
     unsigned debug_frame = 0;  // --debug-frame: describe every draw of this frame
     std::wstring press_script; // --press: "frame:button,frame:button" scripted controller input
+    std::wstring perf_at;      // --perf-at S:D: record performance for D seconds from S seconds after the first frame
     std::wstring memdump;      // --memdump [*]ADDR:SIZE:F1,F2,...: raw memory to the --screenshot dir at those frames
     unsigned watch_pad = 0;    // --watch-pad N: from frame N, log game code that reads the right stick (DR3)
     uint32_t watch_read = 0;   // --watch-read [w][*]ADDR[+OFF]: with --watch-pad, watch these 4 bytes instead
@@ -115,6 +116,7 @@ bool exit_requested();
 // Address -> "name+off" using functions.csv if it was loaded (crash reports and hook logs).
 void symbols_load(const std::wstring &csv_path);
 std::string sym_name(uint32_t addr);
+bool sym_function(uint32_t addr, std::string *name, uint32_t *start); // the function containing addr, if known
 
 // Kernel call tracing: first call of each function is always logged; with --trace every call.
 #define KTRACE(fmt, ...)                                                                    \

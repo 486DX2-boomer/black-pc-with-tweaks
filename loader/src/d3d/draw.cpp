@@ -10,6 +10,7 @@
 #include "d3d/pushbuf.h"
 #include "d3d/state.h"
 #include "d3d/vshader.h"
+#include "perf.h"
 
 #include <wincodec.h>
 
@@ -430,7 +431,69 @@ void decode_element(uint8_t t, const uint8_t *p, float *o)
     }
 }
 
-std::vector<float> g_conv;
+// Decode `count` elements of one type, `sstride` bytes apart, into float4s `ostride` floats apart.
+void decode_run(uint8_t t, const uint8_t *p, uint32_t sstride, float *o, uint32_t ostride, uint32_t count)
+{
+    switch (t) {
+    case 0x12: // FLOAT1
+        for (uint32_t v = 0; v < count; v++, p += sstride, o += ostride) {
+            o[0] = *(const float *)p;
+            o[1] = o[2] = 0.0f;
+            o[3] = 1.0f;
+        }
+        return;
+    case 0x22: // FLOAT2
+        for (uint32_t v = 0; v < count; v++, p += sstride, o += ostride) {
+            const float *f = (const float *)p;
+            o[0] = f[0];
+            o[1] = f[1];
+            o[2] = 0.0f;
+            o[3] = 1.0f;
+        }
+        return;
+    case 0x32: // FLOAT3
+        for (uint32_t v = 0; v < count; v++, p += sstride, o += ostride) {
+            const float *f = (const float *)p;
+            o[0] = f[0];
+            o[1] = f[1];
+            o[2] = f[2];
+            o[3] = 1.0f;
+        }
+        return;
+    case 0x42: // FLOAT4
+        for (uint32_t v = 0; v < count; v++, p += sstride, o += ostride) {
+            const float *f = (const float *)p;
+            o[0] = f[0];
+            o[1] = f[1];
+            o[2] = f[2];
+            o[3] = f[3];
+        }
+        return;
+    case 0x40: // D3DCOLOR (ARGB) -> RGBA
+        for (uint32_t v = 0; v < count; v++, p += sstride, o += ostride) {
+            uint32_t c = *(const uint32_t *)p;
+            constexpr float k = 1.0f / 255.0f;
+            o[0] = ((c >> 16) & 255) * k;
+            o[1] = ((c >> 8) & 255) * k;
+            o[2] = (c & 255) * k;
+            o[3] = (c >> 24) * k;
+        }
+        return;
+    case 0x16: // NORMPACKED3: 11:11:10 signed normalized
+        for (uint32_t v = 0; v < count; v++, p += sstride, o += ostride) {
+            uint32_t c = *(const uint32_t *)p;
+            o[0] = ((int32_t)(c << 21) >> 21) * (1.0f / 1023.0f);
+            o[1] = ((int32_t)(c << 10) >> 21) * (1.0f / 1023.0f);
+            o[2] = ((int32_t)c >> 22) * (1.0f / 511.0f);
+            o[3] = 1.0f;
+        }
+        return;
+    default:
+        for (uint32_t v = 0; v < count; v++, p += sstride, o += ostride) decode_element(t, p, o);
+    }
+}
+
+std::vector<float> g_conv; // only grows: a resize per draw zero-filled it every time
 std::unordered_map<const VertexShader *, IDirect3DVertexDeclaration9 *> g_decls;
 IDirect3DVertexDeclaration9 *g_decl_imm16; // immediate mode: all 16 attributes
 
@@ -471,8 +534,9 @@ const uint8_t *stream_data(uint32_t stream);
 // Returns the stride of the converted vertices (16 bytes per declaration element).
 uint32_t convert_vertices(const VertexShader *vs, uint32_t first, uint32_t count, const uint8_t *up, uint32_t up_stride)
 {
+    perf::Scope perf_scope(perf::kConvert);
     uint32_t ne = vs->num_elements, stride = 16 * ne;
-    g_conv.resize((size_t)count * ne * 4);
+    if (g_conv.size() < (size_t)count * ne * 4) g_conv.resize((size_t)count * ne * 4);
     for (uint32_t e = 0; e < ne; e++) {
         const VertexElement &el = vs->elements[e];
         const uint8_t *base;
@@ -489,8 +553,7 @@ uint32_t convert_vertices(const VertexShader *vs, uint32_t first, uint32_t count
             for (uint32_t v = 0; v < count; v++, o += ne * 4) { o[0] = o[1] = o[2] = 0; o[3] = 1; }
             continue;
         }
-        const uint8_t *p = base + (size_t)first * s_stride + el.offset;
-        for (uint32_t v = 0; v < count; v++, p += s_stride, o += ne * 4) decode_element(el.xtype, p, o);
+        decode_run(el.xtype, base + (size_t)first * s_stride + el.offset, s_stride, o, ne * 4, count);
     }
     return stride;
 }
@@ -510,6 +573,9 @@ void linear_texture_scale(int stage, float *sx, float *sy)
     *sy = 1.0f / (float)h;
 }
 
+// All 200 registers on every draw (~1.3 ms a frame in busy scenes). Sending only the registers that changed
+// since the last upload broke the picture: the device then held values that were never sent to those
+// registers (seen with GetVertexShaderConstantF), not explained by the shaders' def constants; not solved yet.
 void upload_vs_constants(IDirect3DDevice9 *d)
 {
     d->SetVertexShaderConstantF(0, &g_st.vs_constants[0][0], 192);
@@ -667,6 +733,7 @@ void draw_up(uint32_t xprim, uint32_t verts, const void *data, uint32_t stride)
 {
     Prim p = conv_prim(xprim, verts);
     if (!p.count) return;
+    perf::add_draw(verts, verts * stride);
     IDirect3DDevice9 *d = host3d::dev();
     if (p.quads)
         d->DrawIndexedPrimitiveUP(p.type, 0, verts, p.count, quad_indices(verts / 4), D3DFMT_INDEX16, data, stride);
@@ -684,6 +751,7 @@ void draw_indexed_up(uint32_t xprim, uint32_t nidx, const uint16_t *idx, const v
     }
     Prim p = conv_prim(xprim, nidx);
     if (!p.count) return;
+    perf::add_draw(mx - mn + 1, (mx - mn + 1) * stride);
     if (p.quads) {
         g_tmp_indices.resize(p.count * 3);
         for (uint32_t q = 0; q < nidx / 4; q++) {
@@ -713,6 +781,7 @@ const uint8_t *scale_rhw(const DrawCtx &ctx, const void *data, uint32_t first, u
     auto *src = (const uint8_t *)data;
     float sx = scale_x(), sy = scale_y();
     if (ctx.path != Path::Fvf || (ctx.fvf & D3DFVF_POSITION_MASK) != D3DFVF_XYZRHW || (sx == 1 && sy == 1) || !src) return src;
+    perf::Scope perf_scope(perf::kConvert);
     g_rhw.assign(src + (size_t)first * stride, src + (size_t)(first + count) * stride);
     for (uint32_t v = 0; v < count; v++) {
         float *p = (float *)&g_rhw[(size_t)v * stride];
@@ -729,6 +798,7 @@ void __stdcall D3DDevice_DrawVerticesUP(uint32_t PrimitiveType, uint32_t VertexC
 {
     DTRACE("%u, %u, %p, %u", PrimitiveType, VertexCount, pVertexStreamZeroData, VertexStreamZeroStride);
     pb_flush();
+    perf::Scope perf_scope(perf::kDraw);
     DrawCtx ctx;
     if (!begin_draw(ctx)) return;
     if (ctx.path == Path::Prog) {
@@ -747,6 +817,7 @@ void __stdcall D3DDevice_DrawVertices(uint32_t PrimitiveType, uint32_t StartVert
 {
     DTRACE("%u, %u, %u", PrimitiveType, StartVertex, VertexCount);
     pb_flush();
+    perf::Scope perf_scope(perf::kDraw);
     DrawCtx ctx;
     if (!begin_draw(ctx)) return;
     if (ctx.path == Path::Prog) {
@@ -801,6 +872,7 @@ void __stdcall D3DDevice_DrawIndexedVertices(uint32_t PrimitiveType, uint32_t Ve
 {
     DTRACE("%u, %u, %p", PrimitiveType, VertexCount, pIndexData);
     pb_flush();
+    perf::Scope perf_scope(perf::kDraw);
     DrawCtx ctx;
     if (!begin_draw(ctx) || !pIndexData || !VertexCount) return;
     if (ctx.path == Path::Prog) {
@@ -836,6 +908,7 @@ void __stdcall D3DDevice_DrawIndexedVertices(uint32_t PrimitiveType, uint32_t Ve
 
 void draw_immediate(uint32_t prim, const float *verts, uint32_t count, uint32_t attr_mask)
 {
+    perf::Scope perf_scope(perf::kDraw);
     DrawCtx ctx;
     if (!begin_draw(ctx)) return;
     if (ctx.path == Path::Prog) { // the 16 attribute slots are exactly the shader's v0-v15
@@ -880,6 +953,7 @@ void draw_immediate(uint32_t prim, const float *verts, uint32_t count, uint32_t 
 
 void draw_inline_array(uint32_t prim, const uint32_t *data, uint32_t dwords)
 {
+    perf::Scope perf_scope(perf::kDraw);
     DrawCtx ctx;
     if (!begin_draw(ctx)) return;
     if (ctx.path == Path::Prog) { // inline data uses the stream-0 layout of the declaration

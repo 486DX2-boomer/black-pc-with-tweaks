@@ -6,9 +6,13 @@
 #include "common.h"
 #include "d3d/device.h"
 #include "input/autoaim.h"
+#include "perf.h"
 #include "settings.h"
 
+#include <shellapi.h>
+
 #include <algorithm>
+#include <string>
 
 namespace menu {
 namespace {
@@ -102,6 +106,10 @@ HMENU build()
     item(input, ID_INVERT, L"&Invert mouse");
     item(input, ID_RELEASE_MOUSE, L"Release &mouse\tEsc");
 
+    HMENU tools = popup(bar, L"&Tools");
+    item(tools, ID_PERF_RECORD, L"&Record performance\tF2");
+    item(tools, ID_PERF_FOLDER, L"&Open recordings folder");
+
     HMENU help = popup(bar, L"&Help");
     item(help, ID_CONTROLS, L"&Controls...");
     item(help, ID_ABOUT, L"&About...");
@@ -133,6 +141,7 @@ void update(HMENU bar, bool fullscreen)
     for (UINT id = ID_SENS_1; id <= ID_SENS_4; id++) check(bar, id, id == s);
     check(bar, ID_INVERT, g_cfg.mouse_invert);
     check(bar, ID_NO_AUTOAIM, !g_cfg.autoaim);
+    check(bar, ID_PERF_RECORD, perf::recording());
 }
 
 void command(HWND hwnd, UINT id)
@@ -171,6 +180,14 @@ void command(HWND hwnd, UINT id)
     case ID_SENS_DOWN: g_cfg.mouse_sens = std::max(0.1f, g_cfg.mouse_sens / 1.1f); break;
     case ID_INVERT: g_cfg.mouse_invert = !g_cfg.mouse_invert; break;
     case ID_NO_AUTOAIM: autoaim_set(!g_cfg.autoaim); break;
+    case ID_PERF_RECORD: perf::toggle(); return;
+    case ID_PERF_FOLDER: {
+        CreateDirectoryW(L"perf", nullptr);
+        wchar_t full[MAX_PATH];
+        GetFullPathNameW(L"perf", MAX_PATH, full, nullptr);
+        ShellExecuteW(hwnd, L"open", full, nullptr, nullptr, SW_SHOWNORMAL);
+        return;
+    }
     case ID_CONTROLS:
         MessageBoxW(hwnd,
                     L"Mouse: look (click the picture to capture it, Esc or Alt+Tab releases it)\n"
@@ -196,6 +213,17 @@ void command(HWND hwnd, UINT id)
     default: return;
     }
     settings_save();
+}
+
+void perf_report(HWND hwnd, bool windowed)
+{
+    if (!windowed || g_cfg.background) return; // fullscreen: the title says it was saved; tests: no dialog
+    std::wstring text = widen(perf::last_report_text());
+    text += L"\n\nSaved in ";
+    text += perf::last_report_dir();
+    text += L"\n\nOpen the folder?";
+    if (MessageBoxW(hwnd, text.c_str(), L"Performance recording", MB_YESNO | MB_ICONINFORMATION) == IDYES)
+        ShellExecuteW(hwnd, L"open", perf::last_report_dir(), nullptr, nullptr, SW_SHOWNORMAL);
 }
 
 } // namespace menu

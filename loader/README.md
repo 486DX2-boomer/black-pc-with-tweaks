@@ -41,12 +41,14 @@ output after the game's own gamma ramp (default 1.0 / 1.0; `--no-ramp` shows the
 Relative paths resolve against the current folder; if the game is not found there, black.exe looks upwards
 from its own folder for `game\default.xbe` and uses that folder (so it can be started from anywhere).
 
-The window has a menu bar (Game, Video, Audio, Input, Help) for the port's settings: render resolution,
+The window has a menu bar (Game, Video, Audio, Input, Tools, Help) for the port's settings: render resolution,
 anti-aliasing, fullscreen, aspect ratio and frame rate (after restart), brightness, reverb, mouse, auto-aim. Choices are
 saved to `black.ini` in the game folder; command-line flags override it for that run. Esc releases the mouse
 so the menu can be reached. In the game window: F11 fullscreen on/off (the window resizes at the game's aspect; other shapes get black
 bars), F3/F4 mouse sensitivity, F5/F6 gain, F7/F8 gamma, F9 anti-aliasing, F10 render size 1 / 1.5 / 2 x the window (all shown in the title), F12 dumps the next frame
-(draw log, every render target as PNG) into `work\dumps` for bug reports.
+(draw log, every render target as PNG) into `work\dumps` for bug reports. F2 (or Tools > Record performance) starts and
+stops a performance recording: frame times, where the CPU time goes, threads; saved in `perf\<date_time>\` next to
+`black.ini` (summary.txt, frames.csv, threads.csv). `--perf-at S:D` records D seconds from S seconds after the first frame.
 
 Controls: every PC controller drives the Xbox pad on port 0. Keyboard and mouse (click the window to capture
 the mouse, Alt+Tab releases it): mouse = look (rotates the view directly), left button = right trigger, right

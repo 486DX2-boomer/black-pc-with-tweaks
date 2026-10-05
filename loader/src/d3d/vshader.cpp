@@ -1,6 +1,7 @@
 #include "d3d/vshader.h"
 
 #include "d3d/host.h"
+#include "perf.h"
 #include "d3d/nv2a_vsh.h"
 #include "kernel/kexports.h"
 
@@ -133,6 +134,8 @@ IDirect3DVertexShader9 *vs_host_shader(VertexShader *vs)
     if (!vs || !vs->program) return nullptr;
     if (vs->host_vs || vs->translate_failed) return vs->host_vs;
     std::string hlsl = vsh_to_hlsl(vs->program, vs->program_insts, vs_input_mask(vs));
+    perf::Scope perf_scope(perf::kCompile);
+    perf::add_compile();
     ID3DBlob *code = nullptr, *errors = nullptr;
     HRESULT hr = E_FAIL;
     for (const char *profile : {"vs_2_0", "vs_2_a"}) {

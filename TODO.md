@@ -22,6 +22,10 @@ Open work on the BLACK PC port. Findings and addresses live in `NOTES.md`; this 
 - [ ] 60 fps (`--fps 60`, not the default): world step 1/60 s, audio fine, weapon refire and reload blur now match
       30 fps (measured). Check the rest in play: other weapons/fire modes, animations, AI, effects, scripted scenes;
       decide whether 60 becomes the default.
+- [ ] 60 fps slowdowns in busy scenes (user; also on PS2): the port's CPU overhead on the one game thread is the limit
+      (perf recorder, NOTES.md). Round 1 done (texture checks once per frame, faster vertex conversion, shader key reuse,
+      XInput): test scene 10.8 -> 5.1 ms. User to re-record the busy scene. Next: VS constants only when changed (broke the
+      picture, see NOTES), cache converted vertices in host buffers, log writes off the render thread, game CPU other than CPU 0.
 - [ ] Reverb (bin 11 send into an FDN reverb): level and character against the Xbox (`--reverb-gain`).
 
 ## Next
