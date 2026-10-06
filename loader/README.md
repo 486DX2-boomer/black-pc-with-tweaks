@@ -49,7 +49,9 @@ bars), F3/F4 mouse sensitivity, F5/F6 gain, F7/F8 gamma, F9 anti-aliasing, F10 r
 (draw log, every render target as PNG) into `work\dumps` for bug reports. F2 (or Tools > Record performance) starts and
 stops a performance recording: frame times, where the CPU time goes, threads; saved in `perf\<date_time>\` next to
 `black.ini` (summary.txt, frames.csv, threads.csv). `--perf-at S:D` records D seconds from S seconds after the first frame. On a ~60 Hz display the frame clock follows the
-display's refresh (smooth frame delivery); `--timer-vblank` uses a fixed 59.94 Hz timer instead.
+display's refresh (smooth frame delivery); `--timer-vblank` uses a fixed 59.94 Hz timer instead. The game threads run on
+one CPU like the Xbox (the last physical core, its hyperthread sibling kept free); `--game-cpu N` picks another. On weak
+PCs (old laptops with Intel graphics) play at 30 fps (Video > Frame rate), the game's original rate.
 
 Controls: every PC controller drives the Xbox pad on port 0. Keyboard and mouse (click the window to capture
 the mouse, Alt+Tab releases it): mouse = look (rotates the view directly), left button = right trigger, right

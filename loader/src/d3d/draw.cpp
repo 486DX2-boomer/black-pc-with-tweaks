@@ -528,6 +528,29 @@ IDirect3DVertexDeclaration9 *decl_imm16()
     return g_decl_imm16;
 }
 
+// Immediate-mode vertices hold all 16 attribute slots as float4 (256 bytes), but D3D9 vertex strides go up to
+// 255: Intel's driver overran its vertex buffer with 256 (a laptop crashed at the start of the first level in
+// DrawPrimitiveUP). Draws send only the slots the game wrote or the shader declares, with a declaration per set.
+std::unordered_map<uint32_t, IDirect3DVertexDeclaration9 *> g_decl_imm;
+std::vector<float> g_imm_pack;
+
+IDirect3DVertexDeclaration9 *decl_imm(uint32_t mask)
+{
+    IDirect3DVertexDeclaration9 *&d = g_decl_imm[mask];
+    if (!d) {
+        D3DVERTEXELEMENT9 el[17];
+        BYTE n = 0;
+        for (BYTE i = 0; i < 16; i++)
+            if (mask & (1u << i)) {
+                el[n] = {0, (WORD)(16 * n), D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, i};
+                n++;
+            }
+        el[n] = D3DDECL_END();
+        if (FAILED(host3d::dev()->CreateVertexDeclaration(el, &d))) logf("[d3d] CreateVertexDeclaration failed for immediate mask 0x%x", mask);
+    }
+    return d;
+}
+
 const uint8_t *stream_data(uint32_t stream);
 
 // Convert vertices [first, first+count) of the current streams (or user data for stream 0) for `vs`.
@@ -684,6 +707,51 @@ void debug_draw(const char *what, const DrawCtx &ctx, uint32_t prim, uint32_t co
 }
 
 // Set up state for a draw. Returns false (and counts a skipped draw) if it cannot be drawn.
+// The shaders and vertex input last sent to the device. Drivers do not all filter repeats, and Intel's spent
+// ~2 ms a frame on them. Fullscreen passes change these and restore them with a state block, so these stay valid.
+IDirect3DPixelShader9 *g_ps_sent = (IDirect3DPixelShader9 *)~0u;
+IDirect3DVertexShader9 *g_vs_sent = (IDirect3DVertexShader9 *)~0u;
+IDirect3DVertexDeclaration9 *g_decl_sent; // null after SetFVF
+DWORD g_fvf_sent = ~0u;                   // ~0 after SetVertexDeclaration
+
+void set_ps(IDirect3DDevice9 *d, IDirect3DPixelShader9 *ps)
+{
+    if (ps != g_ps_sent) d->SetPixelShader(g_ps_sent = ps);
+}
+
+void set_vs(IDirect3DDevice9 *d, IDirect3DVertexShader9 *vs)
+{
+    if (vs != g_vs_sent) d->SetVertexShader(g_vs_sent = vs);
+}
+
+void set_fvf(IDirect3DDevice9 *d, DWORD fvf)
+{
+    if (fvf == g_fvf_sent && !g_decl_sent) return;
+    d->SetFVF(g_fvf_sent = fvf);
+    g_decl_sent = nullptr;
+}
+
+void set_decl(IDirect3DDevice9 *d, IDirect3DVertexDeclaration9 *decl)
+{
+    if (decl == g_decl_sent) return;
+    d->SetVertexDeclaration(g_decl_sent = decl);
+    g_fvf_sent = ~0u;
+}
+
+} // namespace
+
+// After a fullscreen pass: set everything again at the next draw instead of trusting the state block's restore
+// (a laptop with Intel graphics crashed in a vertex copy inside D3D9 after the cache was added).
+void forget_sent_shaders()
+{
+    g_ps_sent = (IDirect3DPixelShader9 *)~0u;
+    g_vs_sent = (IDirect3DVertexShader9 *)~0u;
+    g_decl_sent = nullptr;
+    g_fvf_sent = ~0u;
+}
+
+namespace {
+
 bool begin_draw(DrawCtx &ctx)
 {
     IDirect3DDevice9 *d = host3d::dev();
@@ -694,21 +762,21 @@ bool begin_draw(DrawCtx &ctx)
     apply_texture_stages(d, !ps); // may copy a render target (outside the scene) first
     host3d::begin_scene();
     IDirect3DPixelShader9 *hps = ps ? ps_host_shader() : nullptr;
-    d->SetPixelShader(hps);
+    set_ps(d, hps);
     if (hps) upload_ps_constants(d);
     else if (ps) apply_pixel_shader_fallback(d);
     uint32_t h = g_st.vertex_shader;
     if (vs_is_fvf(h)) {
         if (h) {
-            d->SetVertexShader(nullptr);
-            d->SetFVF(h);
+            set_vs(d, nullptr);
+            set_fvf(d, h);
             apply_fvf_texture_scale(d);
             ctx.path = Path::Fvf;
             ctx.fvf = h;
         }
     } else if (VertexShader *vs = vs_from_handle(h)) {
         if (IDirect3DVertexShader9 *hv = vs_host_shader(vs)) {
-            d->SetVertexShader(hv);
+            set_vs(d, hv);
             upload_vs_constants(d);
             ctx.path = Path::Prog;
             ctx.vs = vs;
@@ -804,7 +872,7 @@ void __stdcall D3DDevice_DrawVerticesUP(uint32_t PrimitiveType, uint32_t VertexC
     if (ctx.path == Path::Prog) {
         uint32_t stride = convert_vertices(ctx.vs, 0, VertexCount, (const uint8_t *)pVertexStreamZeroData, VertexStreamZeroStride);
         debug_draw("DrawVerticesUP", ctx, PrimitiveType, VertexCount, g_conv.data(), stride / 4);
-        host3d::dev()->SetVertexDeclaration(decl_for(ctx.vs));
+        set_decl(host3d::dev(), decl_for(ctx.vs));
         draw_up(PrimitiveType, VertexCount, g_conv.data(), stride);
         return;
     }
@@ -823,7 +891,7 @@ void __stdcall D3DDevice_DrawVertices(uint32_t PrimitiveType, uint32_t StartVert
     if (ctx.path == Path::Prog) {
         uint32_t stride = convert_vertices(ctx.vs, StartVertex, VertexCount, nullptr, 0);
         debug_draw("DrawVertices", ctx, PrimitiveType, VertexCount, g_conv.data(), stride / 4);
-        host3d::dev()->SetVertexDeclaration(decl_for(ctx.vs));
+        set_decl(host3d::dev(), decl_for(ctx.vs));
         draw_up(PrimitiveType, VertexCount, g_conv.data(), stride);
         return;
     }
@@ -885,7 +953,7 @@ void __stdcall D3DDevice_DrawIndexedVertices(uint32_t PrimitiveType, uint32_t Ve
         debug_draw("DrawIndexedVertices", ctx, PrimitiveType, VertexCount, g_conv.data(), stride / 4);
         if (debug_frame_active() && !g_cfg.debug_frame_end) // single debug frames only (ranges stay fast)
             dump_packed_normal_geometry(ctx.vs, PrimitiveType, VertexCount, pIndexData, mn, mx);
-        host3d::dev()->SetVertexDeclaration(decl_for(ctx.vs));
+        set_decl(host3d::dev(), decl_for(ctx.vs));
         // indices refer to vertex 0: point the data "mn vertices before" the converted block
         draw_indexed_up(PrimitiveType, VertexCount, pIndexData, (const uint8_t *)g_conv.data() - (size_t)mn * stride, stride);
         return;
@@ -913,8 +981,23 @@ void draw_immediate(uint32_t prim, const float *verts, uint32_t count, uint32_t 
     if (!begin_draw(ctx)) return;
     if (ctx.path == Path::Prog) { // the 16 attribute slots are exactly the shader's v0-v15
         debug_draw("immediate", ctx, prim, count, verts, 64);
-        host3d::dev()->SetVertexDeclaration(decl_imm16());
-        draw_up(prim, count, verts, 256);
+        uint32_t mask = (attr_mask | vs_input_mask(ctx.vs) | 1u) & 0xFFFF, n = 0;
+        uint8_t slot[16];
+        for (uint32_t i = 0; i < 16; i++)
+            if (mask & (1u << i)) slot[n++] = (uint8_t)i;
+        if (n == 16) { // every slot: no smaller layout (not seen so far)
+            KNOTE_ONCE("immediate-mode draw with all 16 attributes (256-byte vertices)");
+            set_decl(host3d::dev(), decl_imm16());
+            draw_up(prim, count, verts, 256);
+            return;
+        }
+        KNOTE_ONCE("immediate-mode draws send %u of 16 attributes (mask 0x%x, %u-byte vertices)", n, mask, n * 16);
+        if (g_imm_pack.size() < (size_t)count * n * 4) g_imm_pack.resize((size_t)count * n * 4);
+        float *o = g_imm_pack.data();
+        for (uint32_t v = 0; v < count; v++)
+            for (uint32_t k = 0; k < n; k++, o += 4) memcpy(o, verts + v * 64 + slot[k] * 4, 16);
+        set_decl(host3d::dev(), decl_imm(mask));
+        draw_up(prim, count, g_imm_pack.data(), n * 16);
         return;
     }
     uint32_t fvf = ctx.fvf;
@@ -961,7 +1044,7 @@ void draw_inline_array(uint32_t prim, const uint32_t *data, uint32_t dwords)
         if (!in_stride) return;
         uint32_t count = dwords * 4 / in_stride;
         uint32_t stride = convert_vertices(ctx.vs, 0, count, (const uint8_t *)data, in_stride);
-        host3d::dev()->SetVertexDeclaration(decl_for(ctx.vs));
+        set_decl(host3d::dev(), decl_for(ctx.vs));
         draw_up(prim, count, g_conv.data(), stride);
         return;
     }

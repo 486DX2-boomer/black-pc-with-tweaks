@@ -6,19 +6,38 @@
 
 namespace {
 
+bool in_image(uint32_t addr)
+{
+    const Xbe *x = image_xbe();
+    return x && addr >= x->base && addr < x->base + x->size_of_image;
+}
+
+// "module.dll+0x1234" for an address in a loaded module (blackrt.map from the build gives port functions).
+std::string module_offset(uint32_t addr)
+{
+    HMODULE m = nullptr;
+    wchar_t path[MAX_PATH];
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)(uintptr_t)addr, &m) ||
+        !GetModuleFileNameW(m, path, MAX_PATH))
+        return "";
+    std::wstring w = path;
+    char b[160];
+    snprintf(b, sizeof b, "%s+0x%x", narrow(w.substr(w.find_last_of(L"\\/") + 1)).c_str(), addr - (uint32_t)(uintptr_t)m);
+    return b;
+}
+
 std::string where(uint32_t addr)
 {
+    if (!in_image(addr)) {
+        std::string mo = module_offset(addr);
+        if (!mo.empty()) return mo;
+    }
     std::string s = sym_name(addr);
     if (const Xbe *x = image_xbe())
         if (const XbeSection *sec = x->section_containing(addr)) s += " [" + sec->name + "]";
     return s;
 }
 
-bool in_image(uint32_t addr)
-{
-    const Xbe *x = image_xbe();
-    return x && addr >= x->base && addr < x->base + x->size_of_image;
-}
 
 bool safe_read(const uint32_t *p, uint32_t *out)
 {
@@ -43,11 +62,19 @@ void log_stack_trace_ex(const uint32_t *esp, const uint32_t *top)
 {
     const Xbe *x = image_xbe();
     if (!x) return;
+    static uint32_t rt_lo, rt_hi; // blackrt.dll: port frames are listed too
+    if (!rt_lo) {
+        HMODULE m = nullptr;
+        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)&log_stack_trace_ex, &m);
+        auto *nt = (const IMAGE_NT_HEADERS *)((const uint8_t *)m + ((const IMAGE_DOS_HEADER *)m)->e_lfanew);
+        rt_lo = (uint32_t)(uintptr_t)m;
+        rt_hi = rt_lo + nt->OptionalHeader.SizeOfImage;
+    }
     int found = 0;
-    for (int i = 0; i < 512 && found < 12 && esp + i < top; i++) {
+    for (int i = 0; i < 512 && found < 16 && esp + i < top; i++) {
         uint32_t v;
         if (!safe_read(esp + i, &v)) break;
-        if (!in_image(v) || v < x->base + 8) continue;
+        if (!(in_image(v) && v >= x->base + 8) && !(v >= rt_lo + 8 && v < rt_hi)) continue;
         const uint8_t *p = (const uint8_t *)(uintptr_t)v;
         bool call = p[-5] == 0xE8 || (p[-2] == 0xFF && (p[-1] & 0x38) == 0x10) || (p[-3] == 0xFF && (p[-2] & 0x38) == 0x10) ||
                     (p[-6] == 0xFF && (p[-5] & 0x38) == 0x10);

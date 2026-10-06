@@ -12,6 +12,9 @@ void draw_immediate(uint32_t prim, const float *verts, uint32_t count, uint32_t 
 // dwords of vertex data in the current vertex format.
 void draw_inline_array(uint32_t prim, const uint32_t *data, uint32_t dwords);
 
+// The shaders / vertex input the draws remember having sent are unknown again (after a fullscreen pass).
+void forget_sent_shaders();
+
 // Save the host back buffer as a PNG (used by --screenshot).
 bool save_screenshot(const wchar_t *path);
 // A 32-bit render target surface as PNG: colour, or with alpha_as_gray its alpha channel.

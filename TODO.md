@@ -25,7 +25,10 @@ Open work on the BLACK PC port. Findings and addresses live in `NOTES.md`; this 
 - [ ] 60 fps slowdowns in busy scenes (user; also on PS2): the port's CPU overhead on the one game thread is the limit
       (perf recorder, NOTES.md). Round 1 done (texture checks once per frame, faster vertex conversion, shader key reuse,
       XInput): test scene 10.8 -> 5.1 ms; busy scene 78% -> 99.5% game speed. Round 2: stable textures checked every 16th frame.
-      Stutter at 100% game speed: vblank now follows the display (DwmFlush), event wake in pace_swap; user to confirm. Next: VS constants only when changed (broke the
+      Stutter at 100% game speed: fixed (vblank follows the display; user: "silky smooth").
+      Weak laptop (i5-4300U, HD 4400): 73.5% at 60 fps; play at 30 there. Round 3: redundant shader/decl calls skipped, game on
+      the last core with its sibling idle. Laptop crash at the first level (256-byte immediate-mode vertices on Intel) fixed;
+      user played the first level through on the laptop. Re-record there at 30 and 60 fps to see what the changes gave. Next: VS constants only when changed (broke the
       picture, see NOTES), cache converted vertices in host buffers, log writes off the render thread, game CPU other than CPU 0.
 - [ ] Reverb (bin 11 send into an FDN reverb): level and character against the Xbox (`--reverb-gain`).
 

@@ -267,6 +267,7 @@ void fullscreen_pass(IDirect3DPixelShader9 *ps, IDirect3DBaseTexture9 *src, IDir
         sb->Apply(); // viewport, shaders, textures and states as the game left them
         sb->Release();
     }
+    forget_sent_shaders();
     if (old_rt) old_rt->Release();
     if (old_z) old_z->Release();
 }

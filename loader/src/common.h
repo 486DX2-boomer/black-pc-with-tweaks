@@ -45,6 +45,7 @@ struct Config {
     bool trace = false;        // log every kernel call, not just the first of each kind
     bool strict = false;       // stop at the first call to an unimplemented kernel function
     bool multicore = false;    // default: pin to one CPU like the Xbox
+    int game_cpu = -1;         // --game-cpu N: the logical CPU for the game threads (default: first CPU of the last core)
     bool skip_videos = false;  // dev: unskippable videos are replaced by the 9-second logo video
     uint32_t shot_every = 60;  // --screenshot cadence in frames
     uint32_t shot_start = 0;   // --shot-start: no cadence screenshots before this many seconds

@@ -1,6 +1,8 @@
 // blackrt.dll entry: BlackMain is called by black.exe (the address-space stub) and never returns.
 #include "common.h"
 
+#include <vector>
+
 #include "d3d/dispatch.h"
 #include "hooks.h"
 #include "image.h"
@@ -43,6 +45,7 @@ void usage()
            "  --strict          stop at the first call to an unimplemented kernel function\n"
            "  --timeout <sec>   exit after this many seconds\n"
            "  --multicore       do not pin the process to one CPU\n"
+           "  --game-cpu N      run the game threads on logical CPU N (default: the last physical core)\n"
            "  --skip-videos     play the 9-second logo video instead of the others (dev: unskippable intro/briefings)\n"
            "  --shot-every N    with --screenshot: every N frames (default 60)\n"
            "  --shot-start S    with --screenshot: start the cadence S seconds after the first frame\n"
@@ -124,6 +127,11 @@ bool parse_args()
         }
         else if (a == L"--strict") g_cfg.strict = true;
         else if (a == L"--multicore") g_cfg.multicore = true;
+        else if (a == L"--game-cpu") {
+            std::wstring v;
+            if (!next(v)) return false;
+            g_cfg.game_cpu = _wtoi(v.c_str());
+        }
         else if (a == L"--skip-videos") g_cfg.skip_videos = true;
         else if (a == L"--normal-aspect") { g_cfg.widescreen = false; settings_mark_cli("widescreen"); }
         else if (a == L"--fullscreen") { g_cfg.fullscreen = true; settings_mark_cli("fullscreen"); }
@@ -277,12 +285,32 @@ void pin_to_one_cpu()
 {
     DWORD_PTR proc = 0, sys = 0;
     GetProcessAffinityMask(GetCurrentProcess(), &proc, &sys);
-    DWORD_PTR one = proc & (~proc + 1); // lowest available CPU
+    // Physical cores (logical CPU masks); hyperthreads of one core share it.
+    std::vector<DWORD_PTR> cores;
+    DWORD len = 0;
+    GetLogicalProcessorInformation(nullptr, &len);
+    std::vector<SYSTEM_LOGICAL_PROCESSOR_INFORMATION> info(len / sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION) + 1);
+    if (len && GetLogicalProcessorInformation(info.data(), &len))
+        for (DWORD i = 0; i < len / sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION); i++)
+            if (info[i].Relationship == RelationProcessorCore && (info[i].ProcessorMask & proc)) cores.push_back(info[i].ProcessorMask & proc);
+    DWORD_PTR one = 0, core = 0;
+    if (g_cfg.game_cpu >= 0 && g_cfg.game_cpu < (int)(8 * sizeof(DWORD_PTR)) && (proc & ((DWORD_PTR)1 << g_cfg.game_cpu))) {
+        one = (DWORD_PTR)1 << g_cfg.game_cpu;
+        for (DWORD_PTR c : cores)
+            if (c & one) core = c;
+    } else if (cores.size() > 1) { // the last core: CPU 0 takes most interrupts and is where Windows puts work first
+        core = cores.back();
+        one = core & (~core + 1);
+    }
+    if (!one) one = proc & (~proc + 1); // lowest available CPU
     if (!one) return;
     g_game_cpu = one;
     SetThreadAffinityMask(GetCurrentThread(), one);
-    logf("cpu: game threads pinned to one CPU (mask 0x%lx) like the single-core Xbox, host threads use the others; "
-         "--multicore to disable", (unsigned long)one);
+    // Keep the core's other hyperthread free: threads created from now on (driver, audio) use the other cores.
+    DWORD_PTR sibling = core & ~one;
+    if (sibling && (proc & ~core)) SetProcessAffinityMask(GetCurrentProcess(), proc & ~sibling);
+    logf("cpu: game threads pinned to CPU mask 0x%lx like the single-core Xbox%s; host threads use the others; --game-cpu N to "
+         "choose, --multicore to disable", (unsigned long)one, sibling && (proc & ~core) ? " (its hyperthread sibling left idle)" : "");
 }
 
 } // namespace
