@@ -68,6 +68,7 @@ struct Config {
     bool mouse_invert = false;
     bool timer_vblank = false; // --timer-vblank: free-running 59.94 Hz vblank instead of following the display
     bool display_vblank = false; // --display-vblank (tests): follow the display even with --background
+    bool effects_native = false; // the small effect buffers at their Xbox size (Video menu); default: render scale, smoothed
     bool seam_fill = true;     // fill hairline cracks between geometry pieces (Video menu, --no-seamfill)
     bool autoaim = true;       // the game's view pull toward targets (input/autoaim.cpp; --no-autoaim, menu)
     int fps = 30;              // --fps 60: swap interval TWO paced as ONE and the world steps 1/60 s (timing.cpp);

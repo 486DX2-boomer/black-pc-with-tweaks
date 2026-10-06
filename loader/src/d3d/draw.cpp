@@ -20,7 +20,7 @@
 
 namespace xd3d {
 
-IDirect3DTexture9 *rt_texture_for(const PixelContainer *tex, uint32_t draw_serial); // device.cpp
+IDirect3DTexture9 *rt_texture_for(const PixelContainer *tex, uint32_t draw_serial, bool linear); // device.cpp
 uint32_t g_draw_serial; // increments per draw (render-target snapshots are shared within a draw)
 uint32_t backbuffer_data();
 uint32_t depthbuffer_data();
@@ -262,7 +262,8 @@ void apply_texture_stages(IDirect3DDevice9 *d, bool fixed_function_pixels)
     for (int s = 0; s < 4; s++) {
         IDirect3DBaseTexture9 *t = nullptr;
         if (Resource *r = g_st.textures[s]) {
-            t = rt_texture_for((const PixelContainer *)r, g_draw_serial);
+            const uint32_t *ts = texture_state(s); // MAGFILTER 3, MINFILTER 4: 2 = LINEAR and up
+            t = rt_texture_for((const PixelContainer *)r, g_draw_serial, ts[3] >= 2 || ts[4] >= 2);
             if (debug_frame_active() && (r->Data == backbuffer_data() || r->Data == depthbuffer_data() || t)) {
                 uint32_t w, h, dd, l;
                 pixel_container_dims((PixelContainer *)r, &w, &h, &dd, &l);
@@ -847,7 +848,7 @@ std::vector<uint8_t> g_rhw;
 const uint8_t *scale_rhw(const DrawCtx &ctx, const void *data, uint32_t first, uint32_t count, uint32_t stride)
 {
     auto *src = (const uint8_t *)data;
-    float sx = scale_x(), sy = scale_y();
+    float sx = target_scale_x(), sy = target_scale_y();
     if (ctx.path != Path::Fvf || (ctx.fvf & D3DFVF_POSITION_MASK) != D3DFVF_XYZRHW || (sx == 1 && sy == 1) || !src) return src;
     perf::Scope perf_scope(perf::kConvert);
     g_rhw.assign(src + (size_t)first * stride, src + (size_t)(first + count) * stride);
@@ -1017,7 +1018,7 @@ void draw_immediate(uint32_t prim, const float *verts, uint32_t count, uint32_t 
         };
         switch (fvf & D3DFVF_POSITION_MASK) {
         case D3DFVF_XYZRHW: // Xbox screen pixels -> render scale
-            putf(a[0][0] * scale_x()); putf(a[0][1] * scale_y()); putf(a[0][2]); putf(a[0][3]);
+            putf(a[0][0] * target_scale_x()); putf(a[0][1] * target_scale_y()); putf(a[0][2]); putf(a[0][3]);
             break;
         default: putf(a[0][0]); putf(a[0][1]); putf(a[0][2]); break;
         }

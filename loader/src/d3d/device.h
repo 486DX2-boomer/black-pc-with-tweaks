@@ -17,8 +17,11 @@ void hle_flush(); // interpret pending inline push-buffer commands
 // the Xbox pixels are 4/3 wider than tall, so x is scaled 4/3 more to keep host pixels square).
 float scale_x();
 float scale_y();
+float target_scale_x(); // the bound render target's scale (1 for the small post-processing buffers)
+float target_scale_y();
 uint32_t host_w(uint32_t xbox_w);
 uint32_t host_h(uint32_t xbox_h);
 void request_render_change(); // the render-size settings in g_cfg changed (menu): applied after the next Swap
+void request_render_rebuild(); // re-create every host target after the next Swap, also at the same render size
 
 } // namespace xd3d

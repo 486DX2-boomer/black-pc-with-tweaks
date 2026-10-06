@@ -38,8 +38,8 @@ Open work on the BLACK PC port. Findings and addresses live in `NOTES.md`; this 
 
 - [x] Custom render resolution: `--resolution WxH | H | native`, fractional `--scale` (any size, not just multiples).
 - [x] Render size changes while running: `native` follows the window (and F11), F10 cycles 1 / 1.5 / 2 x the window.
-- [ ] Faint grid in the game's blur at high render sizes (blur offsets meant for the 160x120/80x60 buffers): give
-      those small buffers their own, smaller scale (per-target scale for viewport/scissor/rects/pre-transformed vertices).
+- [x] Faint grid in the game's blur at high render sizes: the small post-processing buffers keep their Xbox size.
+      (Also checks: glow and light cones look as on the Xbox; nothing else renders into small targets.)
 - [ ] Resolution: better downsampling when the render size is much larger than the window (box filter instead of
       one bilinear tap).
 - [ ] Rebindable keys (a config file) if the in-game button remapping is not enough.

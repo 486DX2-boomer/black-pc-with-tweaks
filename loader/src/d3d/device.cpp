@@ -49,6 +49,10 @@ struct HostRT {
     IDirect3DTexture9 *tex = nullptr;
     uint32_t w = 0, h = 0;   // host size (Xbox size x render scale)
     uint32_t xw = 0, xh = 0; // Xbox size
+    float sx = 0, sy = 0;    // the scale it was made with (1 for the small post-processing buffers)
+    uint32_t epoch = 0;      // times bound for drawing (its contents may have changed since)
+    IDirect3DTexture9 *smooth = nullptr; // box-filtered copy for the game's blur taps (scaled small buffers)
+    uint32_t smooth_epoch = ~0u, smooth_serial = ~0u;
 };
 uint64_t mem_key(uint32_t data, uint32_t w, uint32_t h) { return ((uint64_t)data << 24) | ((uint64_t)(w & 0xFFF) << 12) | (h & 0xFFF); }
 std::unordered_map<uint64_t, HostRT> g_rts;
@@ -114,6 +118,7 @@ void surface_size(const PixelContainer *s, uint32_t *w, uint32_t *h)
 float g_scale_x, g_scale_y; // set at CreateDevice (setup_render_scale), changed at run time by change_render_scale
 int g_native_w, g_native_h; // the picture size the native render size was made for
 std::atomic<bool> g_render_request{false}; // the menu changed the render-size settings
+std::atomic<bool> g_force_rebuild{false};  // re-create the host targets even at the same render size
 D3DRECT g_scissor;          // the game's scissor rectangle (Xbox pixels) and whether it is on, to re-apply after a rescale
 bool g_scissor_on;
 
@@ -147,12 +152,26 @@ float scale_y()
 uint32_t host_w(uint32_t xbox_w) { return (uint32_t)lroundf(xbox_w * scale_x()); }
 uint32_t host_h(uint32_t xbox_h) { return (uint32_t)lroundf(xbox_h * scale_y()); }
 
+// The game's small post-processing buffers (glow, light cones, blur: 320x240, 160x120, 80x60, 64x32): targets of
+// at most half the back buffer in both directions. Its blur samples them with offsets in their own texels, so at
+// 3-4x the size the taps skipped texels and showed a faint grid. By default they stay at the render scale and
+// are box-filtered over one Xbox texel before a linear-filtered draw samples them (smoothed_rt); with "Effects at
+// original resolution" (g_cfg.effects_native) they keep their Xbox size instead (softer, blockier, like the Xbox).
+bool small_buffer(uint32_t xw, uint32_t xh) { return xw * 2 <= (uint32_t)g_width && xh * 2 <= (uint32_t)g_height; }
+bool native_size(uint32_t xw, uint32_t xh) { return g_cfg.effects_native && small_buffer(xw, xh); }
+
+// The scale of the bound render target (viewport, scissor, clear rectangles, pre-transformed vertices).
+float g_cur_sx, g_cur_sy;
+float target_scale_x() { return g_cur_sx ? g_cur_sx : scale_x(); }
+float target_scale_y() { return g_cur_sy ? g_cur_sy : scale_y(); }
+
 namespace {
 
-// An Xbox pixel rectangle on a host render target (edges rounded, so adjacent rectangles still meet).
+// An Xbox pixel rectangle on the bound host render target (edges rounded, so adjacent rectangles still meet).
 RECT host_rect(LONG x1, LONG y1, LONG x2, LONG y2)
 {
-    return {lroundf(x1 * scale_x()), lroundf(y1 * scale_y()), lroundf(x2 * scale_x()), lroundf(y2 * scale_y())};
+    float sx = target_scale_x(), sy = target_scale_y();
+    return {lroundf(x1 * sx), lroundf(y1 * sy), lroundf(x2 * sx), lroundf(y2 * sy)};
 }
 
 HostRT &host_rt(const PixelContainer *s)
@@ -163,8 +182,11 @@ HostRT &host_rt(const PixelContainer *s)
     if (!rt.tex) {
         rt.xw = w;
         rt.xh = h;
-        w = host_w(w);
-        h = host_h(h);
+        bool native = native_size(w, h);
+        rt.sx = native ? 1.0f : scale_x();
+        rt.sy = native ? 1.0f : scale_y();
+        w = native ? w : host_w(w);
+        h = native ? h : host_h(h);
         host3d::dev()->CreateTexture(w, h, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &rt.tex, nullptr);
         rt.w = w;
         rt.h = h;
@@ -188,8 +210,10 @@ HostZ &host_z(const PixelContainer *z, uint32_t rt_w, uint32_t rt_h, uint64_t *k
     if (h < rt_h) h = rt_h;
     *key = mem_key(z->Data, w, h);
     HostZ &hz = g_zs[*key];
-    w = host_w(w);
-    h = host_h(h);
+    if (!native_size(w, h)) { // the same size as the render targets it pairs with
+        w = host_w(w);
+        h = host_h(h);
+    }
     if (!hz.surf) {
         if (host3d::intz() &&
             SUCCEEDED(host3d::dev()->CreateTexture(w, h, 1, D3DUSAGE_DEPTHSTENCIL, host3d::FMT_INTZ, D3DPOOL_DEFAULT, &hz.tex, nullptr)))
@@ -307,8 +331,10 @@ const char kZViewPS[] = "sampler2D z : register(s0);\n"
 
 IDirect3DTexture9 *depth_view(uint64_t key, const HostZ &z, uint32_t w, uint32_t h) // w, h: Xbox pixels
 {
-    w = host_w(w);
-    h = host_h(h);
+    if (!native_size(w, h)) { // the size of the depth surface
+        w = host_w(w);
+        h = host_h(h);
+    }
     if (!g_zview_ps) g_zview_ps = compile_ps(kZViewPS, "zview");
     IDirect3DTexture9 *&view = g_zviews[key];
     if (!view) host3d::dev()->CreateTexture(w, h, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &view, nullptr);
@@ -585,6 +611,10 @@ void bind_render_target(Surface *rt, Surface *z)
         if (rt == g_backbuffer) g_main_z = z;
         uint64_t zkey;
         HostZ &hz = host_z(z, h.xw, h.xh, &zkey);
+        uint32_t zw, zh;
+        surface_size(z, &zw, &zh);
+        if (native_size(std::max(zw, h.xw), std::max(zh, h.xh)) != native_size(h.xw, h.xh))
+            KNOTE_ONCE("render target %ux%u and depth %ux%u at different scales: depth test misaligned", h.xw, h.xh, zw, zh);
         auto c = g_rts.find(zkey);
         if (g_owner[zkey] == Owner::Color && c != g_rts.end() && hz.tex) {
             color_to_depth(c->second.tex, hz, c->second.w, c->second.h); // memory last written as colour
@@ -595,12 +625,21 @@ void bind_render_target(Surface *rt, Surface *z)
         zs = hz.surf;
     }
     g_owner[mem_key(rt->Data, rw, rh)] = Owner::Color;
+    h.epoch++;
     IDirect3DSurface9 *s = nullptr;
     h.tex->GetSurfaceLevel(0, &s);
     d->SetRenderTarget(0, s);
     s->Release();
     g_cur_rt = h.tex;
     d->SetDepthStencilSurface(zs);
+    if (g_cur_sx != h.sx || g_cur_sy != h.sy) { // a target of another scale: the scissor follows (SetRenderTarget
+        g_cur_sx = h.sx;                         // re-applies the viewport itself)
+        g_cur_sy = h.sy;
+        if (g_scissor_on) {
+            RECT r = host_rect(g_scissor.x1, g_scissor.y1, g_scissor.x2, g_scissor.y2);
+            d->SetScissorRect(&r);
+        }
+    }
 }
 
 // Copy a render target texture (outside the scene) into a same-size scratch texture.
@@ -729,7 +768,40 @@ void __stdcall vblank_thread(void *)
 // Host render target texture for a texture the game samples (same memory and size), or null. A draw that
 // samples the target it renders into (BLACK's final colour pass reads the back buffer) gets a copy; one
 // copy per draw is shared by all stages.
-IDirect3DTexture9 *rt_texture_for(const PixelContainer *tex, uint32_t draw_serial)
+// Four bilinear taps a quarter Xbox texel off the centre: an average over about one Xbox texel of a buffer
+// rendered at the render scale (c0.xy = 0.25 / Xbox size, in texture coordinates).
+const char kBoxPS[] = "sampler2D s : register(s0);\n"
+                      "float4 o : register(c0);\n"
+                      "float4 main(float2 uv : TEXCOORD0) : COLOR0 {\n"
+                      "  return 0.25 * (tex2D(s, uv + o.xy) + tex2D(s, uv - o.xy) + tex2D(s, uv + float2(o.x, -o.y)) +\n"
+                      "                 tex2D(s, uv + float2(-o.x, o.y)));\n"
+                      "}\n";
+IDirect3DPixelShader9 *g_box_ps;
+
+IDirect3DTexture9 *smoothed_rt(HostRT &h, uint32_t draw_serial)
+{
+    bool bound = h.tex == g_cur_rt; // sampled while being drawn into: its contents change with every draw
+    if (h.smooth && h.smooth_epoch == h.epoch && (!bound || h.smooth_serial == draw_serial)) return h.smooth;
+    static bool tried;
+    if (!g_box_ps && !tried) {
+        tried = true;
+        g_box_ps = compile_ps(kBoxPS, "box");
+    }
+    if (!g_box_ps) return h.tex;
+    if (!h.smooth) host3d::dev()->CreateTexture(h.w, h.h, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &h.smooth, nullptr);
+    if (!h.smooth) return h.tex;
+    IDirect3DSurface9 *s = nullptr;
+    h.smooth->GetSurfaceLevel(0, &s);
+    float c[4] = {0.25f / h.xw, 0.25f / h.xh, 0, 0};
+    host3d::end_scene();
+    fullscreen_pass(g_box_ps, h.tex, s, nullptr, h.w, h.h, false, c, true);
+    s->Release();
+    h.smooth_epoch = h.epoch;
+    h.smooth_serial = draw_serial;
+    return h.smooth;
+}
+
+IDirect3DTexture9 *rt_texture_for(const PixelContainer *tex, uint32_t draw_serial, bool linear)
 {
     uint32_t w, h;
     surface_size(tex, &w, &h);
@@ -750,6 +822,7 @@ IDirect3DTexture9 *rt_texture_for(const PixelContainer *tex, uint32_t draw_seria
     }
     if (it == g_rts.end()) return nullptr;
     IDirect3DTexture9 *t = it->second.tex;
+    if (linear && it->second.sx > 1.5f && small_buffer(it->second.xw, it->second.xh)) return smoothed_rt(it->second, draw_serial);
     if (t != g_cur_rt) return t;
     static uint32_t snap_serial = ~0u;
     static IDirect3DTexture9 *snap_src, *snap;
@@ -1068,13 +1141,15 @@ void change_render_scale(int pic_w, int pic_h)
 {
     float ox = g_scale_x, oy = g_scale_y;
     setup_render_scale(pic_w, pic_h);
-    if (fabsf(ox - g_scale_x) < 1e-4f && fabsf(oy - g_scale_y) < 1e-4f) return;
+    if (fabsf(ox - g_scale_x) < 1e-4f && fabsf(oy - g_scale_y) < 1e-4f && !g_force_rebuild.exchange(false)) return;
     host3d::end_scene();
     IDirect3DDevice9 *d = host3d::dev();
     d->SetRenderTarget(0, g_host_backbuffer);
     d->SetDepthStencilSurface(g_host_depth);
-    for (auto &kv : g_rts)
+    for (auto &kv : g_rts) {
         if (kv.second.tex) kv.second.tex->Release();
+        if (kv.second.smooth) kv.second.smooth->Release();
+    }
     g_rts.clear();
     for (auto &kv : g_zs) {
         if (kv.second.surf) kv.second.surf->Release();
@@ -1103,6 +1178,11 @@ void change_render_scale(int pic_w, int pic_h)
 }
 
 void request_render_change() { g_render_request = true; }
+void request_render_rebuild()
+{
+    g_force_rebuild = true;
+    g_render_request = true;
+}
 
 // After each Swap: F10 cycles the render size between 1, 1.5 and 2 x the window (switching to native mode),
 // and in native mode the render size follows the window once a resize has settled for 0.3 s.
