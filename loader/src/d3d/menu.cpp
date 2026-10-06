@@ -53,6 +53,7 @@ HMENU build()
     HMENU video = popup(bar, L"&Video");
     item(video, ID_FULLSCREEN, L"&Fullscreen\tF11");
     item(video, ID_AA, L"&Anti-aliasing\tF9");
+    item(video, ID_SEAMFILL, L"Fill geometry &seams");
     HMENU res = CreatePopupMenu();
     AppendMenuW(video, MF_POPUP, (UINT_PTR)res, L"&Render resolution");
     item(res, ID_RES_NATIVE1, L"Window size\tF10");
@@ -120,6 +121,7 @@ void update(HMENU bar, bool fullscreen)
 {
     check(bar, ID_FULLSCREEN, fullscreen);
     check(bar, ID_AA, g_cfg.aa);
+    check(bar, ID_SEAMFILL, g_cfg.seam_fill);
     UINT res = ID_RES_DEFAULT;
     if (g_cfg.render_native) res = g_cfg.render_factor > 1.75f ? ID_RES_NATIVE2 : g_cfg.render_factor > 1.25f ? ID_RES_NATIVE15 : ID_RES_NATIVE1;
     else if (g_cfg.render_h == 720 && !g_cfg.render_w) res = ID_RES_720;
@@ -148,6 +150,7 @@ void command(HWND hwnd, UINT id)
 {
     switch (id) {
     case ID_AA: g_cfg.aa = !g_cfg.aa; break;
+    case ID_SEAMFILL: g_cfg.seam_fill = !g_cfg.seam_fill; break;
     case ID_RES_NATIVE1: set_render(true, 1.0f, 0); break;
     case ID_RES_NATIVE15: set_render(true, 1.5f, 0); break;
     case ID_RES_NATIVE2: set_render(true, 2.0f, 0); break;

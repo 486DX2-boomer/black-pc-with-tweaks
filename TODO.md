@@ -16,6 +16,7 @@ Open work on the BLACK PC port. Findings and addresses live in `NOTES.md`; this 
 - [ ] Widescreen (default; the game's own 16:9 mode, `--normal-aspect` for 4:3): menus, HUD, videos, briefings.
 - [ ] Window resizing at a fixed aspect, F11 fullscreen, black bars when maximised.
 - [x] Mouse look: rotates the view directly (user: "feels awesome").
+- [ ] Seams of destructible objects: vertex snap 1/8 Xbox pixel + seam fill pass (Video menu); user to confirm.
 - [ ] Weapon sway with mouse look (the gun swivels like with the stick): user to check the feel and amount.
 - [ ] Auto-aim switch (Game > Disable auto-aim, `--no-autoaim`; default on = original): confirm in play that the view
       no longer drifts onto enemies with it ticked, and that nothing else changes.

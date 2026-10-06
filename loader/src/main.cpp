@@ -68,6 +68,7 @@ void usage()
            "  --gain K          output gain after the game's gamma ramp (default 1.0; F5/F6 adjust live)\n"
            "  --no-ramp         ignore the game's gamma ramp (no fades, half brightness: the raw framebuffer)\n"
            "  --no-aa           no anti-aliasing (default: edge-directed post filter; F9 toggles)\n"
+           "  --no-seamfill     do not fill hairline cracks between geometry pieces (destructible walls)\n"
            "  --perf-at S:D     record performance (like F2) for D seconds from S seconds after the first frame\n"
            "  --timer-vblank    vblank from a 59.94 Hz timer instead of the display's refresh (default: follow a ~60 Hz display)\n"
            "  --force           run an XBE other than the known NTSC-U build\n");
@@ -138,6 +139,7 @@ bool parse_args()
         else if (a == L"--no-reverb") { g_cfg.reverb = false; settings_mark_cli("reverb"); }
         else if (a == L"--no-ramp") g_cfg.ramp = false;
         else if (a == L"--no-aa") { g_cfg.aa = false; settings_mark_cli("aa"); }
+        else if (a == L"--no-seamfill") { g_cfg.seam_fill = false; settings_mark_cli("seamfill"); }
         else if (a == L"--rescale-at") { if (!next(g_cfg.rescale_at)) return false; }
         else if (a == L"--reverb-gain") {
             settings_mark_cli("reverb_gain");

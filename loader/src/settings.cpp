@@ -42,6 +42,7 @@ void settings_load()
         } else if (k == "render_factor") g_cfg.render_factor = std::clamp(v, 1.0f, 2.0f);
         else if (k == "scale") g_cfg.scale = std::clamp(v, 0.5f, 8.0f);
         else if (k == "aa") g_cfg.aa = v != 0;
+        else if (k == "seamfill") g_cfg.seam_fill = v != 0;
         else if (k == "fps") g_cfg.fps = atoi(val) == 60 ? 60 : 30;
         else if (k == "widescreen") g_cfg.widescreen = v != 0;
         else if (k == "fullscreen") g_cfg.fullscreen = v != 0;
@@ -73,5 +74,6 @@ void settings_save()
     fprintf(f, "mouse_sens = %.3f\nmouse_invert = %d\n", g_cfg.mouse_sens, g_cfg.mouse_invert ? 1 : 0);
     fprintf(f, "reverb = %d\nreverb_gain = %.2f\n", g_cfg.reverb ? 1 : 0, g_cfg.reverb_gain);
     fprintf(f, "autoaim = %d\n", g_cfg.autoaim ? 1 : 0);
+    fprintf(f, "seamfill = %d\n", g_cfg.seam_fill ? 1 : 0);
     fclose(f);
 }

@@ -295,10 +295,12 @@ void color_to_depth(IDirect3DTexture9 *color, HostZ &hz, uint32_t w, uint32_t h)
 
 // The game reads a Z24S8 depth buffer through an A8R8G8B8 texture header over the same memory: each texel
 // is the dword (Z << 8) | stencil, so A = Z[23:16], R = Z[15:8], G = Z[7:0], B = stencil. Rebuild those bytes
-// from the INTZ depth (BLACK's depth-of-field and reload blur masks come from this).
+// from the INTZ depth (BLACK's depth-of-field and reload blur masks come from this). The min() matters: at
+// depth 1.0, 16777215 + 0.5 is not a float and rounds to 16777216, which turned the cleared sky into 0xFF0000
+// (0.9961, nearer than distant walls) and cut the far light cones, which are depth-tested against a copy.
 const char kZViewPS[] = "sampler2D z : register(s0);\n"
                         "float4 main(float2 uv : TEXCOORD0) : COLOR0 {\n"
-                        "  float v = floor(saturate(tex2D(z, uv).r) * 16777215.0 + 0.5);\n"
+                        "  float v = min(floor(saturate(tex2D(z, uv).r) * 16777215.0 + 0.5), 16777215.0);\n"
                         "  float hi = floor(v / 65536.0), rest = v - hi * 65536.0, mid = floor(rest / 256.0), lo = rest - mid * 256.0;\n"
                         "  return float4(mid, lo, 0, hi) / 255.0;\n"
                         "}\n";
@@ -391,7 +393,7 @@ const char kFxaaPS[] =
     "  return float4(range < max(0.0312, lMax * 0.125) ? cM : c, 1);\n" // no edge: leave the pixel alone
     "}\n";
 IDirect3DPixelShader9 *g_fxaa_ps;
-IDirect3DTexture9 *g_aa_tex[2]; // render-resolution intermediates: after the ramp, after the filter
+IDirect3DTexture9 *g_aa_tex[3]; // render-resolution intermediates: after the ramp, after the filter, seams filled
 
 IDirect3DTexture9 *aa_target(int i, uint32_t w, uint32_t h)
 {
@@ -399,6 +401,33 @@ IDirect3DTexture9 *aa_target(int i, uint32_t w, uint32_t h)
         host3d::dev()->CreateTexture(w, h, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &g_aa_tex[i], nullptr);
     return g_aa_tex[i];
 }
+
+// Seam fill: destructible walls are built from chunks with their own matrices; where they meet, hairline gaps
+// (sub-pixel at the Xbox's 640x480, so rarely visible there) show the background along the whole seam at 3-4x
+// the size, flickering as the view moves. A pixel whose depth is well behind both of its neighbours 1 or 2
+// pixels away (horizontally or vertically) while those two lie at nearly the same depth (one surface) is
+// such a gap: it takes their average colour. Silhouettes do not match (their two sides differ in depth).
+// u = 1 - depth grows with nearness (about 1/distance with the game's infinite far plane).
+const char kSeamPS[] = "sampler2D col : register(s0);\n"
+                       "sampler2D dep : register(s1);\n"
+                       "float4 px : register(c0);\n"
+                       "float u(float2 t) { return 1.0 - tex2D(dep, t).r; }\n"
+                       "float4 main(float2 uv : TEXCOORD0) : COLOR0 {\n"
+                       "  float4 c = tex2D(col, uv);\n"
+                       "  float uc = u(uv);\n"
+                       "  float4 sum = 0; float n = 0;\n"
+                       "  float2 offs[4] = { float2(px.x, 0), float2(0, px.y), float2(2 * px.x, 0), float2(0, 2 * px.y) };\n"
+                       "  for (int i = 0; i < 4; i++) {\n"
+                       "    float ua = u(uv - offs[i]), ub = u(uv + offs[i]);\n"
+                       "    float lo = min(ua, ub), hi = max(ua, ub);\n"
+                       "    float w = step(hi - lo, 0.1 * hi) * step(uc, 0.75 * lo) * step(1e-6, lo) * step(n, 0.5);\n"
+                       "    sum += w * (tex2D(col, uv - offs[i]) + tex2D(col, uv + offs[i]));\n"
+                       "    n += 2 * w;\n"
+                       "  }\n"
+                       "  return n > 0 ? sum / n : c;\n"
+                       "}\n";
+IDirect3DPixelShader9 *g_seam_ps;
+Surface *g_main_z; // the depth surface the game uses with its back buffer
 
 // The ramp texture from the game's current gamma ramp (identity until the game has written one).
 IDirect3DTexture9 *ramp_texture()
@@ -494,6 +523,26 @@ void present_backbuffer()
         g_fxaa_ps = compile_ps(kFxaaPS, "fxaa", "ps_2_a");
         if (!g_fxaa_ps) g_cfg.aa = false;
     }
+    IDirect3DTexture9 *src = bb.tex; // the frame, with seams filled when that is on
+    if (g_cfg.seam_fill && g_main_z) {
+        static bool tried;
+        if (!g_seam_ps && !tried) {
+            tried = true;
+            g_seam_ps = compile_ps(kSeamPS, "seamfill", "ps_2_a");
+            if (!g_seam_ps) logf("[d3d] seam fill shader not available");
+        }
+        uint64_t zkey;
+        HostZ &hz = host_z(g_main_z, bb.xw, bb.xh, &zkey);
+        IDirect3DTexture9 *out = g_seam_ps && hz.tex ? aa_target(2, bb.w, bb.h) : nullptr;
+        if (out) {
+            IDirect3DSurface9 *so = nullptr;
+            out->GetSurfaceLevel(0, &so);
+            float px[4] = {1.0f / bb.w, 1.0f / bb.h, 0, 0};
+            fullscreen_pass(g_seam_ps, bb.tex, so, nullptr, bb.w, bb.h, false, px, false, nullptr, hz.tex);
+            so->Release();
+            src = out;
+        }
+    }
     IDirect3DTexture9 *aa0 = g_cfg.aa ? aa_target(0, bb.w, bb.h) : nullptr, *aa1 = g_cfg.aa ? aa_target(1, bb.w, bb.h) : nullptr;
     if (g_gamma_ps && ramp && aa0 && aa1) {
         // ramp + gamma 1:1 into aa0, anti-alias 1:1 into aa1, then filter into the window
@@ -501,7 +550,7 @@ void present_backbuffer()
         IDirect3DSurface9 *s0 = nullptr, *s1 = nullptr;
         aa0->GetSurfaceLevel(0, &s0);
         aa1->GetSurfaceLevel(0, &s1);
-        fullscreen_pass(g_gamma_ps, bb.tex, s0, nullptr, bb.w, bb.h, false, c, false, nullptr, ramp);
+        fullscreen_pass(g_gamma_ps, src, s0, nullptr, bb.w, bb.h, false, c, false, nullptr, ramp);
         float r[4] = {1.0f / bb.w, 1.0f / bb.h, 0, 0};
         fullscreen_pass(g_fxaa_ps, aa0, s1, nullptr, bb.w, bb.h, false, r, true);
         host3d::dev()->StretchRect(s1, nullptr, g_host_backbuffer, &pic, D3DTEXF_LINEAR);
@@ -509,7 +558,7 @@ void present_backbuffer()
         s1->Release();
     } else if (g_gamma_ps && ramp) {
         float c[4] = {1.0f / g_cfg.gamma, g_cfg.gain, 0, 0};
-        fullscreen_pass(g_gamma_ps, bb.tex, g_host_backbuffer, nullptr, (uint32_t)frame.right, (uint32_t)frame.bottom, false, c,
+        fullscreen_pass(g_gamma_ps, src, g_host_backbuffer, nullptr, (uint32_t)frame.right, (uint32_t)frame.bottom, false, c,
                         true, &pic, ramp);
     } else {
         host3d::dev()->StretchRect(s, nullptr, g_host_backbuffer, &pic, D3DTEXF_LINEAR);
@@ -533,6 +582,7 @@ void bind_render_target(Surface *rt, Surface *z)
     surface_size(rt, &rw, &rh);
     IDirect3DSurface9 *zs = nullptr;
     if (z) {
+        if (rt == g_backbuffer) g_main_z = z;
         uint64_t zkey;
         HostZ &hz = host_z(z, h.xw, h.xh, &zkey);
         auto c = g_rts.find(zkey);
@@ -1139,7 +1189,8 @@ uint32_t __stdcall D3DDevice_Swap(uint32_t Flags)
         screenshot_now(tag);
     }
     static ULONGLONG t0 = GetTickCount64();
-    if ((frames == 1 || frames % g_cfg.shot_every == 0) && GetTickCount64() - t0 >= g_cfg.shot_start * 1000ull) {
+    static const bool periodic = !g_cfg.screenshot_dir.empty(); // --screenshot given (F12 sets the folder later)
+    if (periodic && (frames == 1 || frames % g_cfg.shot_every == 0) && GetTickCount64() - t0 >= g_cfg.shot_start * 1000ull) {
         char tag[32];
         snprintf(tag, sizeof tag, "frame_%05u", frames);
         screenshot_now(tag);

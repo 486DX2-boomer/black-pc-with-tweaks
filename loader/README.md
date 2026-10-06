@@ -36,7 +36,8 @@ factor, default 3 = 2560x1440 in widescreen, 1920x1440 in 4:3); `--resolution 19
 largest that fits the screen), `--fullscreen` starts borderless fullscreen. `--gain K` / `--gamma G` adjust the
 output after the game's own gamma ramp (default 1.0 / 1.0; `--no-ramp` shows the raw framebuffer). `--mouse-sens K` (0.022 degrees x K per count, default 2.0) and
 `--mouse-invert` tune mouse look; `--no-autoaim` turns off the game's auto-aim (the view pulling toward enemies). `--fps 30|60` (default 30, the original; 60 is experimental: weapons fire too fast). `--reverb-gain K`
-(default 1.0) / `--no-reverb` for the room reverb. `--no-aa` turns off the anti-aliasing.
+(default 1.0) / `--no-reverb` for the room reverb. `--no-aa` turns off the anti-aliasing, `--no-seamfill` the
+filling of hairline cracks between geometry pieces (Video > Fill geometry seams).
 
 Relative paths resolve against the current folder; if the game is not found there, black.exe looks upwards
 from its own folder for `game\default.xbe` and uses that folder (so it can be started from anywhere).

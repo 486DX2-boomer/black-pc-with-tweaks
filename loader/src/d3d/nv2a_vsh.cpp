@@ -318,6 +318,12 @@ std::string vsh_to_hlsl(const uint32_t *program, uint32_t count, uint32_t input_
         s += "  }\n";
         if (in.final) break;
     }
+    // The NV2A rasterizes from these screen positions with 4 fractional bits, so vertices of separately
+    // transformed pieces that meet (destructible walls are built from chunks, each with its own matrix) land
+    // on the same point. The host's finer precision at a higher render size left hairline cracks that
+    // flickered along such seams: snap to a sub-pixel grid of the Xbox screen space. 1/16 (the NV2A's own)
+    // still left some at 3-4x the render size; 1/8 closes gaps twice as wide (0.4 host pixels a step at 3.45x).
+    s += "  oPos.xy = floor(oPos.xy * 8.0 + 0.5) * 0.125;\n";
     // The NV2A expects screen-space positions; undo the viewport transform to get D3D clip space.
     // The NV2A does not divide by w (x/y/z are already screen coordinates; w only feeds perspective-
     // correct interpolation), so 2D shaders often leave w = 0: treat 0 / non-finite w as 1.
