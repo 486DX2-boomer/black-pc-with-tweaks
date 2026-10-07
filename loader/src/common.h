@@ -43,6 +43,7 @@ struct Config {
     std::wstring symbols_path; // optional functions.csv for crash reports
     std::wstring screenshot_dir; // --screenshot: PNG frames go here
     bool trace = false;        // log every kernel call, not just the first of each kind
+    bool verbose = false;      // --verbose: the whole log on the console too (default: only logc lines)
     bool strict = false;       // stop at the first call to an unimplemented kernel function
     bool multicore = false;    // default: pin to one CPU like the Xbox
     int game_cpu = -1;         // --game-cpu N: the logical CPU for the game threads (default: first CPU of the last core)
@@ -73,6 +74,10 @@ struct Config {
     bool autoaim = true;       // the game's view pull toward targets (input/autoaim.cpp; --no-autoaim, menu)
     int fps = 30;              // --fps 60: swap interval TWO paced as ONE and the world steps 1/60 s (timing.cpp);
                                // not the default yet: weapon fire still runs per frame (twice as fast)
+    // Menu choices for widescreen and fps, which the game reads at boot: saved to black.ini for the next run while
+    // the running session keeps the values above (0 / -1 = no change chosen).
+    int fps_next = 0;
+    int widescreen_next = -1;
     bool reverb = true;        // mix the I3DL2 reverb send (--no-reverb to compare)
     float reverb_gain = 1.0f;  // --reverb-gain: overall reverb level
     bool background = false;   // --background (tests): window minimised without focus, audio muted
@@ -108,8 +113,9 @@ extern std::atomic<uint32_t> g_frame_count; // frames presented so far (d3d/devi
 
 // Logging: every line goes to the log file and the console, prefixed with time and host thread id.
 void log_init(const std::wstring &path);
-void logf(const char *fmt, ...);
+void logf(const char *fmt, ...); // the log file (and the console with --verbose)
 void logv(const char *fmt, va_list ap);
+void logc(const char *fmt, ...); // the log file and the console: startup, setup errors, exit, crashes
 [[noreturn]] void fatal(const char *fmt, ...);
 std::string narrow(const std::wstring &w);
 std::wstring widen(const std::string &s);

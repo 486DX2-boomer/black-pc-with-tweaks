@@ -23,7 +23,9 @@ void log_init(const std::wstring &path)
     g_log_ready = true;
 }
 
-void logv(const char *fmt, va_list ap)
+namespace {
+
+void log_line(const char *fmt, va_list ap, bool console)
 {
     char msg[2048];
     vsnprintf(msg, sizeof msg, fmt, ap);
@@ -37,7 +39,10 @@ void logv(const char *fmt, va_list ap)
         return;
     }
     EnterCriticalSection(&g_log_cs);
-    fputs(line, stdout);
+    if (console || g_cfg.verbose) {
+        fputs(line, stdout);
+        fflush(stdout);
+    }
     if (g_log_file) {
         fputs(line, g_log_file);
         fflush(g_log_file);
@@ -45,11 +50,23 @@ void logv(const char *fmt, va_list ap)
     LeaveCriticalSection(&g_log_cs);
 }
 
+} // namespace
+
+void logv(const char *fmt, va_list ap) { log_line(fmt, ap, false); }
+
 void logf(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    logv(fmt, ap);
+    log_line(fmt, ap, false);
+    va_end(ap);
+}
+
+void logc(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    log_line(fmt, ap, true);
     va_end(ap);
 }
 
@@ -60,7 +77,7 @@ void fatal(const char *fmt, ...)
     char msg[2048];
     vsnprintf(msg, sizeof msg, fmt, ap);
     va_end(ap);
-    logf("FATAL: %s", msg);
+    logc("FATAL: %s", msg);
     fflush(stdout);
     TerminateProcess(GetCurrentProcess(), 3);
     for (;;) {

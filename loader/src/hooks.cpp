@@ -220,7 +220,8 @@ LONG CALLBACK vectored_handler(EXCEPTION_POINTERS *ep)
 LONG WINAPI unhandled_filter(EXCEPTION_POINTERS *ep)
 {
     dump_exception(ep, "UNHANDLED");
-    logf("exiting with code 1 (unhandled exception)");
+    logc("exiting with code 1 (unhandled %s at %08lx %s; registers and stack in the log)",
+         exception_name(ep->ExceptionRecord->ExceptionCode), ep->ContextRecord->Eip, where(ep->ContextRecord->Eip).c_str());
     fflush(stdout);
     TerminateProcess(GetCurrentProcess(), 1); // the crashing thread may be the one that would do the exit
     return EXCEPTION_EXECUTE_HANDLER;

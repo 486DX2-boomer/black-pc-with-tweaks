@@ -1,6 +1,7 @@
 // Menu bar of the game window. Settings change live where the port can (render size, anti-aliasing,
-// brightness, reverb, mouse, auto-aim); aspect ratio and frame rate are read by the game at boot, so those apply after
-// a restart. Every change is saved to black.ini (settings.cpp).
+// brightness, reverb, mouse, auto-aim); aspect ratio and frame rate are read by the game at boot, so a new choice is
+// only saved for the next run (a notice says so) and the running session keeps its values. Every change is saved to
+// black.ini (settings.cpp).
 #include "d3d/menu.h"
 
 #include "common.h"
@@ -38,6 +39,34 @@ void set_render(bool native, float factor, int height)
     g_cfg.render_w = 0;
     g_cfg.render_h = height;
     xd3d::request_render_change();
+}
+
+int shown_fps() { return g_cfg.fps_next ? g_cfg.fps_next : g_cfg.fps; }
+bool shown_widescreen() { return g_cfg.widescreen_next >= 0 ? g_cfg.widescreen_next != 0 : g_cfg.widescreen; }
+
+void next_run_notice(HWND hwnd, const wchar_t *chosen, const wchar_t *running)
+{
+    std::wstring text = std::wstring(chosen) + L" will be used the next time you start BLACK.\n\nUntil then the game keeps "
+                        L"running with " + running + L".";
+    MessageBoxW(hwnd, text.c_str(), L"Applies after restart", MB_OK | MB_ICONINFORMATION);
+}
+
+// Saved for the next run; the notice comes after the save so the choice is kept whatever happens while it is open.
+void choose_fps(HWND hwnd, int fps)
+{
+    if (fps == shown_fps()) return;
+    g_cfg.fps_next = fps == g_cfg.fps ? 0 : fps;
+    settings_save();
+    if (g_cfg.fps_next) next_run_notice(hwnd, fps == 60 ? L"60 fps" : L"30 fps", g_cfg.fps == 60 ? L"60 fps" : L"30 fps");
+}
+
+void choose_widescreen(HWND hwnd, bool wide)
+{
+    if (wide == shown_widescreen()) return;
+    g_cfg.widescreen_next = wide == g_cfg.widescreen ? -1 : wide;
+    settings_save();
+    if (g_cfg.widescreen_next >= 0)
+        next_run_notice(hwnd, wide ? L"Widescreen 16:9" : L"Standard 4:3", g_cfg.widescreen ? L"widescreen 16:9" : L"standard 4:3");
 }
 
 } // namespace
@@ -134,8 +163,8 @@ void update(HMENU bar, bool fullscreen)
     if (res) radio(bar, ID_RES_NATIVE1, ID_RES_DEFAULT, res);
     else
         for (UINT id = ID_RES_NATIVE1; id <= ID_RES_DEFAULT; id++) check(bar, id, false);
-    radio(bar, ID_WIDE, ID_NARROW, g_cfg.widescreen ? ID_WIDE : ID_NARROW);
-    radio(bar, ID_FPS30, ID_FPS60, g_cfg.fps == 60 ? ID_FPS60 : ID_FPS30);
+    radio(bar, ID_WIDE, ID_NARROW, shown_widescreen() ? ID_WIDE : ID_NARROW); // the choice for the next run, if any
+    radio(bar, ID_FPS30, ID_FPS60, shown_fps() == 60 ? ID_FPS60 : ID_FPS30);
     check(bar, ID_REVERB, g_cfg.reverb);
     UINT lv = close_to(g_cfg.reverb_gain, 0.5f) ? ID_REVERB_50 : close_to(g_cfg.reverb_gain, 1.0f) ? ID_REVERB_100
               : close_to(g_cfg.reverb_gain, 1.5f) ? ID_REVERB_150 : close_to(g_cfg.reverb_gain, 2.0f) ? ID_REVERB_200 : 0;
@@ -165,10 +194,10 @@ void command(HWND hwnd, UINT id)
     case ID_RES_1440: set_render(false, 1.0f, 1440); break;
     case ID_RES_2160: set_render(false, 1.0f, 2160); break;
     case ID_RES_DEFAULT: set_render(false, 1.0f, 0); break;
-    case ID_WIDE: g_cfg.widescreen = true; break;
-    case ID_NARROW: g_cfg.widescreen = false; break;
-    case ID_FPS30: g_cfg.fps = 30; break;
-    case ID_FPS60: g_cfg.fps = 60; break;
+    case ID_WIDE: choose_widescreen(hwnd, true); return;
+    case ID_NARROW: choose_widescreen(hwnd, false); return;
+    case ID_FPS30: choose_fps(hwnd, 30); return;
+    case ID_FPS60: choose_fps(hwnd, 60); return;
     case ID_GAIN_UP: g_cfg.gain = std::min(3.0f, g_cfg.gain + 0.1f); break;
     case ID_GAIN_DOWN: g_cfg.gain = std::max(0.5f, g_cfg.gain - 0.1f); break;
     case ID_GAIN_RESET: g_cfg.gain = 1.0f; break;
@@ -215,8 +244,9 @@ void command(HWND hwnd, UINT id)
         return;
     case ID_ABOUT:
         MessageBoxW(hwnd,
-                    L"BLACK PC port\n\nRuns your own copy of the original Xbox game (default.xbe) natively, with the Xbox "
-                    L"kernel, Direct3D, DirectSound and input replaced by PC code.\n\nSettings are saved to black.ini in the game folder.",
+                    L"BLACK PC port " _CRT_WIDE(BLACK_VERSION) L"\n\nRuns your own copy of the original Xbox game (default.xbe) natively, with the Xbox "
+                    L"kernel, Direct3D, DirectSound and input replaced by PC code.\n\nSettings are saved to black.ini in the game folder."
+                    L"\n\nFree software under the GNU GPL, version 2 or later. Not affiliated with Criterion Games or Electronic Arts.",
                     L"About", MB_OK | MB_ICONINFORMATION);
         return;
     default: return;

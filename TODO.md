@@ -21,6 +21,8 @@ Open work on the BLACK PC port. Findings and addresses live in `NOTES.md`; this 
 - [ ] Auto-aim switch (Game > Disable auto-aim, `--no-autoaim`; default on = original): confirm in play that the view
       no longer drifts onto enemies with it ticked, and that nothing else changes.
 - [ ] Keyboard layout: the user's binding is in (see loader/README.md); confirm in play.
+- [ ] Aspect ratio / frame rate in the menu: a notice, the choice saved for the next run, nothing changes until
+      then (checked with a scripted run; black.ini writing is skipped in --background, confirm in play).
 - [ ] 60 fps (`--fps 60`, not the default): world step 1/60 s, audio fine, weapon refire and reload blur now match
       30 fps (measured). Check the rest in play: other weapons/fire modes, animations, AI, effects, scripted scenes;
       decide whether 60 becomes the default.

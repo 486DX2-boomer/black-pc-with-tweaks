@@ -7,7 +7,7 @@ Read `NOTES.md` (findings, build facts, environment) and `docs/ROADMAP.md` (7-ph
 A 32-bit Windows program that loads the user's own `game/default.xbe` and runs the original x86 code natively, with the Xbox kernel,
 D3D8, DSound and XAPI replaced by PC code (HLE, like Cxbx-Reloaded). Decompiling to C++ is incremental and secondary: first get the
 original code running, then replace subsystems with decompiled C++ in priority order. Decomp = functionally equivalent C++, not
-byte-matching (no XDK compiler). The user is Mike; the work was started on a Mac and is being continued on a Windows PC.
+byte-matching (no XDK compiler). The work was started on a Mac and is being continued on a Windows PC.
 
 ## State (2026-10-04)
 

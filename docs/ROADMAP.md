@@ -1,12 +1,11 @@
 <!--
-Local copy of the Claude Docs doc "BLACK Xbox to PC Port Roadmap" (owner: Mike), taken 2026-10-04.
-Live version: https://claude.ai/code/artifact/da29542e-4e8b-4c83-9e73-6081c85cfee3
+Copy of the project's planning doc "BLACK Xbox to PC Port Roadmap", taken 2026-10-04.
 Findings made after this was written are in ../NOTES.md ("Findings that change the plan"), not edited in here.
 -->
 
 # BLACK Xbox to PC Port Roadmap
 
-Oct 4, 2026 · @Mike
+Oct 4, 2026
 
 ## Goal: a native Windows build of BLACK from the original Xbox version
 

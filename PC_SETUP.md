@@ -1,6 +1,7 @@
 # Windows PC setup
 
-For the machine that will build and run the loader. Everything the project needs is already on this drive.
+Developer setup for building, running and analysing the port on Windows (players only need `README.md`). Written as
+the handoff from the Mac, where the disc was extracted and analysed, to the PC.
 
 ## 0. First session prompt (paste into Claude Code on the PC, with this folder open)
 
@@ -23,7 +24,7 @@ winget install BaldurKarlsson.RenderDoc
 
 - Ghidra (only to browse the analysis): download the release zip from https://github.com/NationalSecurityAgency/ghidra/releases (12.1.4 or newer), unzip, run `ghidraRun.bat`.
   Import `ghidra/default.xbe.gzf` with File > Import File. It already holds every label and the symbol matches; no extension needed just to view it.
-- xemu (Phase 2, reference): https://xemu.app. Its files are already on this drive under `Xbox-Emulator-Files/` (`mcpx/mcpx_1.0.bin`, `bios/Complex_4627.bin`, `hdd/xbox_hdd.qcow2`) next to `Black.iso`. Point xemu at them; do not copy them into the repo.
+- xemu (Phase 2, reference): https://xemu.app. It needs the MCPX boot ROM, BIOS and HDD image from your own console; keep them out of the repo.
 - Build target is **32-bit**: use the "x86" / "Win32" toolchain (`cmake -A Win32`, or the "x86 Native Tools" prompt).
 
 ## 2. Checks before writing code

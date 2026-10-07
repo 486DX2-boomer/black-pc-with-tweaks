@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.24)
 if(POLICY CMP0184)
   cmake_policy(SET CMP0184 NEW) # MSVC_RUNTIME_CHECKS property
 endif()
-project(black_loader C CXX)
+project(black_loader VERSION 0.1.0 LANGUAGES C CXX) # the release number (About box, first log line)
 
 if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
   message(FATAL_ERROR "The loader must be 32-bit: configure with -A Win32 (or use the 'win32' preset).")
@@ -56,7 +56,8 @@ add_library(blackrt SHARED
   src/input/xinput.cpp
 )
 target_include_directories(blackrt PRIVATE src)
-target_compile_definitions(blackrt PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS UNICODE _UNICODE)
+target_compile_definitions(blackrt PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS UNICODE _UNICODE
+  BLACK_VERSION="${PROJECT_VERSION}")
 target_compile_options(blackrt PRIVATE /W3 /utf-8 /EHsc)
 target_link_libraries(blackrt PRIVATE ntdll bcrypt d3d9 d3dcompiler windowscodecs ole32 user32 gdi32 winmm dbghelp advapi32 shell32)
 # Xbox SEH handlers run through the same fs:[0] chain; no SafeSEH tables anywhere in the process.
@@ -65,10 +66,11 @@ target_link_options(blackrt PRIVATE /SAFESEH:NO /MAP) # blackrt.map: port addres
 # black.exe: tiny stub with no CRT. Linked at 0x10000 with a large BSS so its own image owns the
 # XBE's address range (0x10000-0x587a40) before Windows can place heaps or stacks there.
 # blackrt.dll then maps the XBE over this image (headers included) and never returns.
+# A Windows-subsystem program: no console window; started from a command prompt it attaches to that one (main.cpp).
 add_executable(black stub/stub.c)
 target_link_libraries(black PRIVATE blackrt kernel32)
 set_property(TARGET black PROPERTY MSVC_RUNTIME_CHECKS "")
 target_compile_options(black PRIVATE /GS- /Gs999999)
 target_link_options(black PRIVATE
   /BASE:0x10000 /FIXED /DYNAMICBASE:NO /NXCOMPAT:NO /SAFESEH:NO /LARGEADDRESSAWARE
-  /NODEFAULTLIB /ENTRY:StubEntry /SUBSYSTEM:CONSOLE /MANIFEST:NO /INCREMENTAL:NO)
+  /NODEFAULTLIB /ENTRY:StubEntry /SUBSYSTEM:WINDOWS /MANIFEST:NO /INCREMENTAL:NO)

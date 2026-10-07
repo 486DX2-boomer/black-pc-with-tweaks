@@ -38,3 +38,6 @@ black.ini
 
 # Performance recordings (Tools > Record performance, F2): machine-specific, may show game function names
 perf/
+
+# Release zips and their symbols (tools/make_release.ps1)
+dist/

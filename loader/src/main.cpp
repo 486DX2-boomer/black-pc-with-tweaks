@@ -28,9 +28,27 @@ HANDLE g_exit_event;
 std::atomic<int> g_exit_code{-1};
 Xbe g_xbe;
 
+// black.exe is a Windows-subsystem program, so a double-click shows only the game window. Started from a command
+// prompt it attaches to that console for the short summary (logc lines, --help, --info); output redirected to a file
+// or pipe by the parent stays there. False when there is nowhere to print.
+bool console_init()
+{
+    if (_fileno(stdout) >= 0) return true; // the parent passed a file or pipe
+    if (!AttachConsole(ATTACH_PARENT_PROCESS)) return false;
+    FILE *f = nullptr;
+    freopen_s(&f, "CONOUT$", "w", stdout);
+    freopen_s(&f, "CONOUT$", "w", stderr);
+    fputs("\n", stdout); // the prompt does not wait for a windowed program: start below it
+    return true;
+}
+
+bool g_console;
+
 void usage()
 {
-    printf("usage: black.exe [options] [path\\to\\default.xbe | game folder]\n"
+    static const char kUsage[] =
+           "BLACK PC port " BLACK_VERSION "\n"
+           "usage: black.exe [options] [path\\to\\default.xbe | game folder]\n"
            "  --info            print the XBE structure and exit\n"
            "  --hdd <dir>       host folder for the Xbox hard disk partitions (default .\\hdd)\n"
            "  --log <file>      log file (default .\\black.log)\n"
@@ -56,7 +74,7 @@ void usage()
            "  --window WxH      window client size (default: largest size of the game's aspect that fits the screen)\n"
            "  --normal-aspect   4:3 like an original Xbox on a standard TV (default: widescreen 16:9)\n"
            "  --fullscreen      start in borderless fullscreen (F11 toggles)\n"
-           "  --fps 30|60       frame rate (default 30, the original; 60 steps the world 1/60 s, but weapons fire too fast)\n"
+           "  --fps 30|60       frame rate (default 30, the original; 60 is experimental)\n"
            "  --no-reverb       do not mix the room reverb\n"
            "  --reverb-gain K   room reverb level (default 1.0)\n"
            "  --background      (tests) start minimised without focus, audio muted\n"
@@ -71,7 +89,10 @@ void usage()
            "  --no-seamfill     do not fill hairline cracks between geometry pieces (destructible walls)\n"
            "  --perf-at S:D     record performance (like F2) for D seconds from S seconds after the first frame\n"
            "  --timer-vblank    vblank from a 59.94 Hz timer instead of the display's refresh (default: follow a ~60 Hz display)\n"
-           "  --force           run an XBE other than the known NTSC-U build\n");
+           "  --force           run an XBE other than the known NTSC-U build\n"
+           "  --verbose         print the whole log on the console too (default: startup, errors, exit; all in the log file)\n";
+    if (g_console) fputs(kUsage, stdout);
+    else if (!g_cfg.background) MessageBoxW(nullptr, widen(kUsage).c_str(), L"BLACK - command-line options", MB_OK);
 }
 
 bool parse_args()
@@ -88,6 +109,7 @@ bool parse_args()
         };
         if (a == L"--info") g_cfg.info_only = true;
         else if (a == L"--trace") g_cfg.trace = true;
+        else if (a == L"--verbose") g_cfg.verbose = true;
         else if (a == L"--trace-d3d") g_trace_d3d = true;
         else if (a == L"--screenshot") { if (!next(g_cfg.screenshot_dir)) return false; }
         else if (a == L"--watch") {
@@ -320,7 +342,7 @@ void pin_to_one_cpu()
 void request_exit(int code, const char *why)
 {
     int expected = -1;
-    if (g_exit_code.compare_exchange_strong(expected, code)) logf("exit requested: %s (code %d)", why, code);
+    if (g_exit_code.compare_exchange_strong(expected, code)) logc("exit requested: %s (code %d)", why, code);
     if (g_exit_event) SetEvent(g_exit_event);
 }
 
@@ -329,6 +351,14 @@ bool exit_requested() { return g_exit_code.load() >= 0; }
 namespace {
 
 bool g_image_mapped; // once true, black.exe's code is gone and BlackMain must not return
+
+// Setup errors a player can fix (no game files, another build): started by a double-click, the console closes with
+// the process, so they also get a message box.
+void startup_error(const std::string &text)
+{
+    logc("%s", text.c_str());
+    if (!g_cfg.background) MessageBoxW(nullptr, widen(text).c_str(), L"BLACK can't start", MB_OK | MB_ICONERROR);
+}
 
 int run(void *reserve, unsigned reserve_size)
 {
@@ -349,13 +379,16 @@ int run(void *reserve, unsigned reserve_size)
 
     log_init(g_cfg.log_path);
     g_exit_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    logf("BLACK loader (blackrt) - XBE %s, hdd %s, log %s%s%s", narrow(g_cfg.xbe_path).c_str(), narrow(g_cfg.hdd_dir).c_str(),
+    logc("BLACK loader " BLACK_VERSION " (blackrt) - XBE %s, hdd %s, log %s%s%s", narrow(g_cfg.xbe_path).c_str(), narrow(g_cfg.hdd_dir).c_str(),
          narrow(g_cfg.log_path).c_str(), g_cfg.trace ? ", trace" : "", g_cfg.strict ? ", strict" : "");
     logf("address-space stub: reserve %p + 0x%x", reserve, reserve_size);
 
     std::string err;
     if (!g_xbe.load(g_cfg.xbe_path, err)) {
-        logf("cannot load %s: %s", narrow(g_cfg.xbe_path).c_str(), err.c_str());
+        wchar_t full[MAX_PATH];
+        if (!GetFullPathNameW(g_cfg.xbe_path.c_str(), MAX_PATH, full, nullptr)) wcscpy_s(full, g_cfg.xbe_path.c_str());
+        startup_error("cannot load " + narrow(full) + ": " + err + "\n\nPut black.exe and blackrt.dll next to the folder that "
+                      "holds the game's files (game\\default.xbe), or give that folder on the command line.");
         return 1;
     }
     std::string title = narrow(g_xbe.title);
@@ -363,9 +396,11 @@ int run(void *reserve, unsigned reserve_size)
          g_xbe.title_id, g_xbe.base, g_xbe.size_of_image, g_xbe.entry, g_xbe.sections.size(), g_xbe.kernel_imports().size());
     std::string hash = sha256_hex(g_xbe.data);
     bool known_build = hash == kKnownXbeSha256;
-    logf("xbe: sha256 %s (%s)", hash.c_str(), known_build ? "known NTSC-U build" : "UNKNOWN build");
+    logc("xbe: sha256 %s (%s)", hash.c_str(), known_build ? "known NTSC-U build" : "UNKNOWN build");
     if (!known_build && !g_cfg.force) {
-        logf("This loader's address tables are for the NTSC-U build only (sha256 %s). Use --force to try anyway.", kKnownXbeSha256);
+        startup_error("This default.xbe is not the NTSC-U build of BLACK that the port supports (its SHA-256 is " + hash +
+                      ", expected " + kKnownXbeSha256 + "). The port's address tables are for that build only; --force "
+                      "tries anyway.");
         return 1;
     }
 
@@ -411,9 +446,10 @@ int run(void *reserve, unsigned reserve_size)
 
 extern "C" __declspec(dllexport) int __cdecl BlackMain(void *reserve, unsigned reserve_size)
 {
+    g_console = console_init();
     int code = run(reserve, reserve_size);
     if (!g_image_mapped) return code; // --info, bad arguments, or failure before the stub was overwritten
-    logf("exiting with code %d", code);
+    logc("exiting with code %d", code);
     fflush(stdout);
     // The caller's code has been replaced by the XBE, and game threads may hold locks: terminate here.
     TerminateProcess(GetCurrentProcess(), (UINT)code);
