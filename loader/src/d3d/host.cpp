@@ -6,6 +6,11 @@
 
 #include <algorithm>
 
+// Common controls 6 (themed buttons and message boxes, the key bindings list): a manifest dependency the linker
+// embeds in blackrt.dll as resource 2; ui_thread activates it for every window it makes.
+#pragma comment(linker, "\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' " \
+                        "processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
+
 namespace host3d {
 namespace {
 
@@ -28,6 +33,7 @@ HMENU g_menu; // the menu bar (hidden in fullscreen)
 std::atomic<bool> g_captured{false};
 std::atomic<int> g_mouse_dx, g_mouse_dy, g_wheel, g_buttons;
 bool g_hold_left; // the capturing click: masked until released
+constexpr UINT WM_APP_CAPTURE = WM_APP + 0x52; // wParam: 1 = capture, 0 = release (request_capture)
 
 // Borderless window over the whole monitor, or back to the window it was.
 void toggle_fullscreen()
@@ -192,11 +198,11 @@ LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             toggle_fullscreen();
             return 0;
         }
-        if (wp == VK_ESCAPE) { // let go of the mouse (to reach the menu bar or other windows)
-            capture_mouse(false);
-            return 0;
-        }
-        break;
+        break; // Esc is the pause key; pausing lets go of the mouse (input/bindings.cpp)
+    case WM_APP_CAPTURE: // from the input poll: pause frees the mouse, resuming play takes it again
+        if (!wp) capture_mouse(false);
+        else if (GetForegroundWindow() == h && !IsIconic(h)) capture_mouse(true);
+        return 0;
     case WM_SYSCOMMAND:
         if ((wp & 0xFFF0) == SC_KEYMENU) return 0; // Alt / F10 must not enter the menu bar by keyboard and stall input
         break;
@@ -227,6 +233,14 @@ DWORD WINAPI ui_thread(void *)
     using SetDesc = HRESULT(WINAPI *)(HANDLE, PCWSTR);
     if (auto set_desc = (SetDesc)GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "SetThreadDescription"))
         set_desc(GetCurrentThread(), L"window (messages, raw mouse)");
+    ACTCTXW ac = {sizeof ac};
+    ac.dwFlags = ACTCTX_FLAG_HMODULE_VALID | ACTCTX_FLAG_RESOURCE_NAME_VALID;
+    ac.hModule = GetModuleHandleW(L"blackrt.dll");
+    ac.lpResourceName = MAKEINTRESOURCEW(2);
+    HANDLE ctx = CreateActCtxW(&ac);
+    ULONG_PTR cookie = 0;
+    if (ctx == INVALID_HANDLE_VALUE || !ActivateActCtx(ctx, &cookie))
+        logf("host: common controls 6 not activated (%lu); dialogs keep the classic look", GetLastError());
     WNDCLASSW wc = {};
     wc.lpfnWndProc = wndproc;
     wc.hInstance = GetModuleHandleW(L"blackrt.dll");
@@ -335,6 +349,11 @@ void frame_layout(RECT *frame, RECT *picture)
 }
 
 bool mouse_captured() { return g_captured; }
+
+void request_capture(bool on)
+{
+    if (g_hwnd) PostMessageW(g_hwnd, WM_APP_CAPTURE, on ? 1 : 0, 0);
+}
 
 int mouse_buttons() { return g_captured ? g_buttons.load() : 0; }
 

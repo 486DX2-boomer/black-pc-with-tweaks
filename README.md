@@ -18,7 +18,8 @@ played through; later missions have had less testing. Please report problems in 
 - Any render resolution (720p to 4K and beyond, or a multiple of the window size), anti-aliasing
 - Widescreen 16:9 (the game's own widescreen mode) or 4:3
 - 30 fps (the original) or 60 fps (experimental)
-- Mouse look, with the weapon swaying as it does with the stick; keyboard and XInput controllers
+- Mouse look, with the weapon swaying as it does with the stick; keys bound to the game's actions; XInput
+  controllers
 - Borderless fullscreen (F11), a menu bar for the port's settings, saved to `black.ini`
 - Room reverb, the game's own brightness and gamma ramp, an option to turn off auto-aim
 - Fixes for things the Xbox hides by its low resolution: flickering seams between pieces of destructible objects,
@@ -65,24 +66,28 @@ port's settings and `black.log` the log of the last run. The game folder can als
 
 ## Controls
 
-Every connected controller drives the first Xbox pad. Keyboard and mouse: click the window to capture the mouse;
-Esc or Alt+Tab releases it.
+Keys and mouse buttons are bound to the game's own actions, not to controller buttons, and can be changed in
+Input > Key bindings (two keys per action, saved to `black.ini`). Controllers work as well. Click the window to
+capture the mouse; Esc lets go of it (in play it also pauses), and play starting or resuming takes it again.
 
-| Key | Xbox pad |
+| Action | Default |
 |---|---|
-| Mouse | look |
-| Left button | right trigger (fire) |
-| Right button | right stick click |
-| Wheel up / down | D-pad left / right |
-| W A S D | left stick (move) |
-| R / F / E / Q | A / B / X / Y |
-| G | left trigger |
-| C | left stick click |
-| Z / X | D-pad up / down |
-| Arrows | D-pad |
-| Enter / Space | START / BACK |
+| Move | W A S D |
+| Look | mouse |
+| Fire / Aim | left / right mouse button |
+| Reload | R |
+| Action (use, pick up) | E |
+| Crouch | C |
+| Grenade | G |
+| Melee | F |
+| Next / previous weapon | mouse wheel down / up |
+| Change firing mode | Z |
+| Toggle suppressor | Q |
+| Health pack | X |
+| Show objectives | Space |
+| Pause | Esc |
 
-The game's own controls screen reassigns actions to pad buttons. Help > Controls in the window lists these keys.
+In menus the arrow keys move, Enter selects and Backspace goes back. Help > Controls lists the current keys.
 
 | Key | Port function |
 |---|---|
@@ -98,7 +103,7 @@ The game's own controls screen reassigns actions to pad buttons. Help > Controls
 ## Settings
 
 The window's menu bar holds the port's settings: render resolution, anti-aliasing, fullscreen, aspect ratio, frame
-rate, brightness, seam filling, reverb, mouse sensitivity and inversion, auto-aim. Most apply at once; aspect ratio
+rate, brightness, seam filling, reverb, key bindings, mouse sensitivity and inversion, auto-aim. Most apply at once; aspect ratio
 and frame rate are read by the game when it starts, so a new choice is used from the next start. Choices are saved to
 `black.ini`.
 
@@ -108,6 +113,7 @@ and frame rate are read by the game when it starts, so a new choice is used from
 ## Known issues
 
 - 60 fps is experimental; 30 fps is the game's original rate and the default.
+- The game's on-screen prompts show Xbox controller buttons, also when you play with the keyboard.
 - Audio: the reverb is an approximation of the Xbox's, some effect sends are not mixed, there is no subwoofer
   channel, and 3D sound uses distance and panning only.
 - Only the NTSC-U build is supported (`--force` tries another build, which will most likely fail).

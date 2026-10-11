@@ -1,0 +1,365 @@
+// Keyboard and mouse bound to the game's own actions.
+//
+// The game reads every player action through its binding table (*0x2F3BD4: 37 dwords, action -> controller
+// channel; FUN_001F1520 fills it from one of the presets at 0x2A7AF0, 0x94 bytes each: default, assault, scout,
+// southpaw, custom; the custom-controls screen edits single entries). The channels are made from the pad by the
+// controller update FUN_000C5A80 (channel object: floats at +0x44, current/previous digital state at +0x25/+0x09):
+//   0-3 D-pad up/down/left/right, 4/5 left stick up/down, 6/7 left/right, 8/9 right stick up/down, 10/11 left/right,
+//   12 START, 13 BACK, 14/15 left/right stick click, 16-23 A B X Y BLACK WHITE, left trigger, right trigger,
+//   24-27 the four stick axes signed; 28 = unbound.
+// A bound key looks up its action's channel in the live table and presses the pad input that feeds that channel,
+// so the keys mean the same action whatever controller layout is chosen in the game, and controllers keep working.
+//
+// Menus, pauses and cutscenes (no player update, see in_play) use fixed keys instead: arrows = D-pad, Enter = A,
+// Backspace = B; Esc there only lets go of the mouse. A key held across a switch between play and menus is ignored
+// until it is released (a press that starts play must not also act in it).
+#include "input/bindings.h"
+
+#include "common.h"
+#include "d3d/host.h"
+#include "input/mouselook.h"
+
+#include <algorithm>
+#include <bitset>
+#include <cctype>
+#include <cstring>
+
+namespace bindings {
+namespace {
+
+// Names as on the game's controls screen (FE_ACTION_* strings; the tables built at 0x214820 pair them with the
+// binding-table index). The movement axes are split into their stick halves.
+const Action kActions[] = {
+    {"run_forward", L"Run forward", 1, {'W', 0}},
+    {"run_back", L"Run back", 2, {'S', 0}},
+    {"step_left", L"Sidestep left", 3, {'A', 0}},
+    {"step_right", L"Sidestep right", 4, {'D', 0}},
+    {"fire", L"Fire", 9, {VK_LBUTTON, 0}},
+    {"aim", L"Aim", 16, {VK_RBUTTON, 0}},
+    {"reload", L"Reload", 11, {'R', 0}},
+    {"use", L"Action (use, pick up)", 13, {'E', 0}},
+    {"crouch", L"Crouch", 12, {'C', 0}},
+    {"grenade", L"Grenade", 27, {'G', 0}},
+    {"melee", L"Melee", 32, {'F', 0}},
+    {"next_weapon", L"Next weapon", 14, {KEY_WHEEL_DOWN, 0}},
+    {"prev_weapon", L"Previous weapon", 15, {KEY_WHEEL_UP, 0}},
+    {"firing_mode", L"Change firing mode", 30, {'Z', 0}},
+    {"suppressor", L"Toggle suppressor", 31, {'Q', 0}},
+    {"health_pack", L"Health pack", 33, {'X', 0}},
+    {"music", L"Next music track", 34, {0, 0}},
+    {"turn_left", L"Turn left", 5, {0, 0}},
+    {"turn_right", L"Turn right", 6, {0, 0}},
+    {"look_up", L"Look up", 7, {0, 0}},
+    {"look_down", L"Look down", 8, {0, 0}},
+    {"pause", L"Pause", 25, {VK_ESCAPE, 0}},
+    {"objectives", L"Show objectives", 36, {VK_SPACE, 0}},
+};
+constexpr int kCount = sizeof kActions / sizeof kActions[0];
+constexpr int kPause = 21;
+
+uint16_t g_keys[kCount][kSlots];
+bool g_keys_set; // defaults applied
+
+void ensure_defaults()
+{
+    if (g_keys_set) return;
+    g_keys_set = true;
+    for (int i = 0; i < kCount; i++)
+        for (int s = 0; s < kSlots; s++) g_keys[i][s] = kActions[i].defaults[s];
+}
+
+struct Named {
+    uint16_t key;
+    const char *name;
+};
+const Named kNames[] = {
+    {VK_LBUTTON, "Mouse1"}, {VK_RBUTTON, "Mouse2"}, {VK_MBUTTON, "Mouse3"}, {VK_XBUTTON1, "Mouse4"}, {VK_XBUTTON2, "Mouse5"},
+    {KEY_WHEEL_UP, "WheelUp"}, {KEY_WHEEL_DOWN, "WheelDown"}, {VK_SPACE, "Space"}, {VK_RETURN, "Enter"}, {VK_ESCAPE, "Esc"},
+    {VK_TAB, "Tab"}, {VK_BACK, "Backspace"}, {VK_SHIFT, "Shift"}, {VK_CONTROL, "Ctrl"}, {VK_MENU, "Alt"},
+    {VK_LSHIFT, "LShift"}, {VK_RSHIFT, "RShift"}, {VK_LCONTROL, "LCtrl"}, {VK_RCONTROL, "RCtrl"}, {VK_LMENU, "LAlt"},
+    {VK_RMENU, "RAlt"}, {VK_CAPITAL, "CapsLock"}, {VK_UP, "Up"}, {VK_DOWN, "Down"}, {VK_LEFT, "Left"}, {VK_RIGHT, "Right"},
+    {VK_INSERT, "Insert"}, {VK_DELETE, "Delete"}, {VK_HOME, "Home"}, {VK_END, "End"}, {VK_PRIOR, "PageUp"},
+    {VK_NEXT, "PageDown"}, {VK_MULTIPLY, "Num*"}, {VK_ADD, "Num+"}, {VK_SUBTRACT, "Num-"}, {VK_DECIMAL, "Num."},
+    {VK_DIVIDE, "Num/"}, {VK_PAUSE, "Pause"}, {VK_SCROLL, "ScrollLock"}, {VK_NUMLOCK, "NumLock"}, {VK_APPS, "Menu"},
+};
+
+// black.ini spelling: the names above, letters and digits as themselves, F1-F24, Num0-Num9, others as 0xNN.
+std::string ini_name(uint16_t k)
+{
+    if (!k) return "none";
+    for (const Named &n : kNames)
+        if (n.key == k) return n.name;
+    if ((k >= 'A' && k <= 'Z') || (k >= '0' && k <= '9')) return std::string(1, (char)k);
+    if (k >= VK_F1 && k <= VK_F24) return "F" + std::to_string(k - VK_F1 + 1);
+    if (k >= VK_NUMPAD0 && k <= VK_NUMPAD9) return "Num" + std::to_string(k - VK_NUMPAD0);
+    char buf[8];
+    snprintf(buf, sizeof buf, "0x%02X", k);
+    return buf;
+}
+
+uint16_t parse_key(const std::string &s)
+{
+    if (s.empty() || _stricmp(s.c_str(), "none") == 0) return 0;
+    for (const Named &n : kNames)
+        if (_stricmp(n.name, s.c_str()) == 0) return n.key;
+    if (s.size() == 1 && isalnum((unsigned char)s[0])) return (uint16_t)toupper((unsigned char)s[0]);
+    if ((s[0] == 'F' || s[0] == 'f') && s.size() <= 3 && isdigit((unsigned char)s[1])) {
+        int n = atoi(s.c_str() + 1);
+        if (n >= 1 && n <= 24) return (uint16_t)(VK_F1 + n - 1);
+    }
+    if (_strnicmp(s.c_str(), "Num", 3) == 0 && s.size() == 4 && isdigit((unsigned char)s[3])) return (uint16_t)(VK_NUMPAD0 + s[3] - '0');
+    if (_strnicmp(s.c_str(), "0x", 2) == 0) return (uint16_t)strtoul(s.c_str(), nullptr, 16);
+    return 0;
+}
+
+// ---- per-poll state (game thread) ----
+
+std::bitset<0x102> g_stale;      // held across a play/menu switch: ignored until released
+std::bitset<0x102> g_script;     // --press k:Name, this poll only
+bool g_was_play;
+bool g_freed_by_esc; // the pause key (or Esc in a menu) let go of the mouse: take it again when play starts
+bool g_release_was_down;
+
+bool raw_held(uint16_t k, bool focus, int mouse)
+{
+    if (k < g_script.size() && g_script[k]) return true;
+    switch (k) {
+    case VK_LBUTTON: return mouse & 1;
+    case VK_RBUTTON: return mouse & 2;
+    case VK_MBUTTON: return mouse & 4;
+    case VK_XBUTTON1: return mouse & 8;
+    case VK_XBUTTON2: return mouse & 16;
+    case KEY_WHEEL_UP:
+    case KEY_WHEEL_DOWN: return false; // handled per notch
+    }
+    return focus && k < 0x100 && (GetAsyncKeyState(k) & 0x8000);
+}
+
+bool menu_key(uint16_t k)
+{
+    return k == VK_UP || k == VK_DOWN || k == VK_LEFT || k == VK_RIGHT || k == VK_RETURN || k == VK_BACK || k == VK_ESCAPE;
+}
+
+// Each wheel notch is one press of the key bound to that direction: held 2 polls, then 2 released so quick notches
+// stay separate presses.
+uint16_t wheel_key(int wheel)
+{
+    static int pending, hold, gap; // pending: notches, + = up, - = down
+    static uint16_t held;
+    pending = std::clamp(pending + wheel, -4, 4);
+    if (hold) {
+        hold--;
+        if (!hold) gap = 2;
+        return held;
+    }
+    if (gap) {
+        gap--;
+        return 0;
+    }
+    if (!pending) return 0;
+    held = pending > 0 ? KEY_WHEEL_UP : KEY_WHEEL_DOWN;
+    pending += pending > 0 ? -1 : 1;
+    hold = 1;
+    return held;
+}
+
+const int32_t *game_table()
+{
+    if (!mouselook_installed()) return nullptr; // not the build these addresses are for
+    const int32_t *t = *(const int32_t *const *)(uintptr_t)0x002F3BD4;
+    return t ? t : (const int32_t *)(uintptr_t)0x002A7AF0; // before the game sets it up: its default preset
+}
+
+struct Pad {
+    uint16_t buttons = 0;
+    uint8_t analog[8] = {};
+    int axis[4] = {}; // left x, left y, right x, right y: sum of +1 / -1 pushes
+};
+
+void press_channel(int ch, Pad &p)
+{
+    static const int8_t kAxis[8][2] = {{1, 1}, {1, -1}, {0, -1}, {0, 1}, {3, 1}, {3, -1}, {2, -1}, {2, 1}}; // channels 4-11
+    if (ch < 0) return;
+    if (ch < 4) p.buttons |= (uint16_t)(1 << ch);
+    else if (ch < 12) p.axis[kAxis[ch - 4][0]] += kAxis[ch - 4][1];
+    else if (ch < 16) p.buttons |= (uint16_t)(0x10 << (ch - 12));
+    else if (ch < 24) p.analog[ch - 16] = 255;
+}
+
+} // namespace
+
+const Action *actions(int *count)
+{
+    *count = kCount;
+    return kActions;
+}
+
+uint16_t key(int action, int slot)
+{
+    ensure_defaults();
+    return g_keys[action][slot];
+}
+
+void set_key(int action, int slot, uint16_t k)
+{
+    ensure_defaults();
+    if (!fixed(action, slot)) g_keys[action][slot] = k;
+}
+
+void reset_defaults()
+{
+    g_keys_set = false;
+    ensure_defaults();
+}
+
+bool fixed(int action, int slot) { return action == kPause && slot == 0; }
+
+bool reserved(uint16_t k) { return k >= VK_F2 && k <= VK_F12; }
+
+std::wstring key_name(uint16_t k)
+{
+    if (!k) return L"";
+    switch (k) {
+    case VK_LBUTTON: return L"Left mouse button";
+    case VK_RBUTTON: return L"Right mouse button";
+    case VK_MBUTTON: return L"Middle mouse button";
+    case VK_XBUTTON1: return L"Mouse button 4";
+    case VK_XBUTTON2: return L"Mouse button 5";
+    case KEY_WHEEL_UP: return L"Mouse wheel up";
+    case KEY_WHEEL_DOWN: return L"Mouse wheel down";
+    case VK_LSHIFT: return L"Left Shift";
+    case VK_RSHIFT: return L"Right Shift";
+    case VK_LCONTROL: return L"Left Ctrl";
+    case VK_RCONTROL: return L"Right Ctrl";
+    case VK_LMENU: return L"Left Alt";
+    case VK_RMENU: return L"Right Alt";
+    }
+    bool oem = (k >= 0xBA && k <= 0xC0) || (k >= 0xDB && k <= 0xDF) || k == 0xE2;
+    if (oem) { // the character on the key in the current layout
+        wchar_t buf[32];
+        UINT sc = MapVirtualKeyW(k, MAPVK_VK_TO_VSC);
+        if (sc && GetKeyNameTextW((LONG)(sc << 16), buf, 32) > 0) return buf;
+    }
+    return widen(ini_name(k));
+}
+
+bool load_ini(const char *k, const char *value)
+{
+    if (strncmp(k, "key_", 4) != 0) return false;
+    ensure_defaults();
+    for (int i = 0; i < kCount; i++) {
+        if (strcmp(k + 4, kActions[i].ini) != 0) continue;
+        std::string v = value;
+        size_t comma = v.find(',');
+        for (int s = 0; s < kSlots; s++) {
+            std::string part = s == 0 ? v.substr(0, comma) : comma == std::string::npos ? "" : v.substr(comma + 1);
+            set_key(i, s, parse_key(part));
+        }
+        return true;
+    }
+    return true; // a key_ line for an action this build does not have
+}
+
+void save_ini(FILE *f)
+{
+    ensure_defaults();
+    for (int i = 0; i < kCount; i++) {
+        std::string v = ini_name(g_keys[i][0]);
+        if (g_keys[i][1]) v += "," + ini_name(g_keys[i][1]);
+        fprintf(f, "key_%s = %s\n", kActions[i].ini, v.c_str());
+    }
+}
+
+void script_hold(const std::string &name)
+{
+    uint16_t k = parse_key(name);
+    if (k && k < g_script.size()) g_script[k] = true;
+}
+
+bool in_play()
+{
+    uint32_t f = mouselook_play_frame();
+    return f && g_frame_count - f <= 3;
+}
+
+void apply(uint16_t &buttons, uint8_t analog[8], int16_t &lx, int16_t &ly, int16_t &rx, int16_t &ry, bool focus,
+           bool mouse_live, int wheel)
+{
+    ensure_defaults();
+    bool play = in_play();
+    int mouse = mouse_live ? host3d::mouse_buttons() : 0;
+    uint16_t wkey = wheel_key(mouse_live ? wheel : 0);
+
+    if (play != g_was_play) { // keys held now belong to the other mode: ignore them until released
+        logf("[input] %s (frame %u)", play ? "in play: keys drive the game's actions" : "menu, pause or cutscene: "
+             "arrows / Enter / Backspace drive the menus", g_frame_count.load());
+        for (int i = 0; i < kCount; i++)
+            for (int s = 0; s < kSlots; s++)
+                if (raw_held(g_keys[i][s], focus, mouse)) g_stale[g_keys[i][s]] = true;
+        for (uint16_t k : {VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT, VK_RETURN, VK_BACK, VK_ESCAPE})
+            if (raw_held(k, focus, 0)) g_stale[k] = true;
+        if (play && g_freed_by_esc && focus) host3d::request_capture(true);
+        if (play) g_freed_by_esc = false;
+        g_was_play = play;
+    }
+    auto held = [&](uint16_t k) {
+        if (!k) return false;
+        if (k == KEY_WHEEL_UP || k == KEY_WHEEL_DOWN) return k == wkey || g_script[k];
+        if (!raw_held(k, focus, mouse)) {
+            g_stale[k] = false;
+            return false;
+        }
+        return !g_stale[k];
+    };
+
+    Pad p;
+    const int32_t *table = game_table();
+    bool pause_down = false;
+    for (int i = 0; i < kCount && table; i++) {
+        bool down = false;
+        for (int s = 0; s < kSlots; s++) {
+            uint16_t k = g_keys[i][s];
+            if (!play && menu_key(k)) continue; // in menus these keys are the menu keys below
+            down |= held(k);
+        }
+        if (!down) continue;
+        if (i == kPause) pause_down = true;
+        int ch = table[kActions[i].game];
+        if (ch < 0 || ch >= 24) {
+            static std::bitset<kCount> told;
+            if (!told[i]) logf("[input] %ls: the game's controller layout has no button for this action", kActions[i].name);
+            told[i] = true;
+            continue;
+        }
+        press_channel(ch, p);
+    }
+    bool menu_esc = false;
+    if (!play) {
+        if (held(VK_UP)) p.buttons |= 0x01;
+        if (held(VK_DOWN)) p.buttons |= 0x02;
+        if (held(VK_LEFT)) p.buttons |= 0x04;
+        if (held(VK_RIGHT)) p.buttons |= 0x08;
+        if (held(VK_RETURN)) p.analog[0] = 255; // A
+        if (held(VK_BACK)) p.analog[1] = 255; // B
+        menu_esc = held(VK_ESCAPE);
+    }
+    // The pause key in play and Esc in menus also let go of the mouse (to reach the menu bar); play starting or
+    // resuming takes it again.
+    bool release = play ? pause_down : menu_esc;
+    if (release && !g_release_was_down && host3d::mouse_captured()) {
+        host3d::request_capture(false);
+        g_freed_by_esc = true;
+    }
+    g_release_was_down = release;
+    g_script.reset();
+
+    buttons |= p.buttons;
+    for (int i = 0; i < 8; i++) analog[i] = std::max(analog[i], p.analog[i]);
+    int16_t *axes[4] = {&lx, &ly, &rx, &ry};
+    for (int i = 0; i < 4; i++) { // keys push the stick fully, unless a pad already pushes that axis further
+        int v = std::clamp(p.axis[i], -1, 1) * 32767;
+        if (v && abs(v) > abs(*axes[i])) *axes[i] = (int16_t)v;
+    }
+}
+
+} // namespace bindings

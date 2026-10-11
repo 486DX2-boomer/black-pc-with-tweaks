@@ -1,6 +1,7 @@
 #include "settings.h"
 
 #include "common.h"
+#include "input/bindings.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -54,6 +55,7 @@ void settings_load()
         else if (k == "autoaim") g_cfg.autoaim = v != 0;
         else if (k == "reverb") g_cfg.reverb = v != 0;
         else if (k == "reverb_gain") g_cfg.reverb_gain = std::clamp(v, 0.0f, 8.0f);
+        else bindings::load_ini(k.c_str(), val); // key_<action> = Key[,Key]
     }
     fclose(f);
 }
@@ -78,5 +80,6 @@ void settings_save()
     fprintf(f, "autoaim = %d\n", g_cfg.autoaim ? 1 : 0);
     fprintf(f, "seamfill = %d\n", g_cfg.seam_fill ? 1 : 0);
     fprintf(f, "effectsnative = %d\n", g_cfg.effects_native ? 1 : 0);
+    bindings::save_ini(f);
     fclose(f);
 }

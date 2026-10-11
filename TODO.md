@@ -20,7 +20,8 @@ Open work on the BLACK PC port. Findings and addresses live in `NOTES.md`; this 
 - [ ] Weapon sway with mouse look (the gun swivels like with the stick): user to check the feel and amount.
 - [ ] Auto-aim switch (Game > Disable auto-aim, `--no-autoaim`; default on = original): confirm in play that the view
       no longer drifts onto enemies with it ticked, and that nothing else changes.
-- [ ] Keyboard layout: the user's binding is in (see loader/README.md); confirm in play.
+- [ ] Key bindings (keys bound to the game's actions, Input > Key bindings): play with them; Esc pauses and frees
+      the mouse, resuming takes it again. The game's on-screen button prompts still show pad buttons.
 - [ ] Aspect ratio / frame rate in the menu: a notice, the choice saved for the next run, nothing changes until
       then (checked with a scripted run; black.ini writing is skipped in --background, confirm in play).
 - [ ] 60 fps (`--fps 60`, not the default): world step 1/60 s, audio fine, weapon refire and reload blur now match
@@ -44,7 +45,7 @@ Open work on the BLACK PC port. Findings and addresses live in `NOTES.md`; this 
       (Also checks: glow and light cones look as on the Xbox; nothing else renders into small targets.)
 - [ ] Resolution: better downsampling when the render size is much larger than the window (box filter instead of
       one bilinear tap).
-- [ ] Rebindable keys (a config file) if the in-game button remapping is not enough.
+- [x] Rebindable keys: bound to the game's actions (Input > Key bindings, black.ini).
 - [x] Settings remembered between launches (black.ini: render size, AA, fps, aspect, fullscreen, gain/gamma, mouse, reverb).
 - [ ] Also remember the window size and position.
 - [x] Port options in a Windows menu bar (vanilla port). In-game Apt menu entries: later, when modifying the game

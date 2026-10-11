@@ -26,6 +26,8 @@ add_library(blackrt SHARED
   src/timing.cpp
   src/input/mouselook.cpp
   src/input/autoaim.cpp
+  src/input/bindings.cpp
+  src/d3d/bindings_dialog.cpp
   src/audio/reverb.cpp
   src/d3d/menu.cpp
   src/settings.cpp

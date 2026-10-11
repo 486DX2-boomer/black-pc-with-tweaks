@@ -7,6 +7,7 @@
 #include "common.h"
 #include "d3d/device.h"
 #include "input/autoaim.h"
+#include "input/bindings.h"
 #include "perf.h"
 #include "settings.h"
 
@@ -124,6 +125,8 @@ HMENU build()
     item(level, ID_REVERB_200, L"200%");
 
     HMENU input = popup(bar, L"&Input");
+    item(input, ID_KEY_BINDINGS, L"&Key bindings...");
+    sep(input);
     HMENU sens = CreatePopupMenu();
     AppendMenuW(input, MF_POPUP, (UINT_PTR)sens, L"Mouse &sensitivity");
     item(sens, ID_SENS_1, L"1.0");
@@ -135,7 +138,7 @@ HMENU build()
     item(sens, ID_SENS_UP, L"Higher\tF4");
     item(sens, ID_SENS_DOWN, L"Lower\tF3");
     item(input, ID_INVERT, L"&Invert mouse");
-    item(input, ID_RELEASE_MOUSE, L"Release &mouse\tEsc");
+    item(input, ID_RELEASE_MOUSE, L"Release &mouse");
 
     HMENU tools = popup(bar, L"&Tools");
     item(tools, ID_PERF_RECORD, L"&Record performance\tF2");
@@ -226,22 +229,24 @@ void command(HWND hwnd, UINT id)
         ShellExecuteW(hwnd, L"open", full, nullptr, nullptr, SW_SHOWNORMAL);
         return;
     }
-    case ID_CONTROLS:
-        MessageBoxW(hwnd,
-                    L"Mouse: look (click the picture to capture it, Esc or Alt+Tab releases it)\n"
-                    L"Left button: right trigger      Right button: right stick click\n"
-                    L"Wheel up / down: D-pad left / right\n\n"
-                    L"WASD: move (left stick)      Arrows: D-pad\n"
-                    L"R: A      F: B      E: X      Q: Y\n"
-                    L"G: left trigger      C: left stick click\n"
-                    L"Z / X: D-pad up / down\n"
-                    L"Enter: START      Space: BACK (select)\n\n"
-                    L"F3 / F4: mouse sensitivity      F5 / F6: gain      F7 / F8: gamma\n"
-                    L"F9: anti-aliasing      F10: render size      F11: fullscreen\n"
-                    L"F12: dump the next frame (bug reports)\n\n"
-                    L"The game's own controls screen reassigns actions to pad buttons.",
-                    L"BLACK - controls", MB_OK | MB_ICONINFORMATION);
+    case ID_KEY_BINDINGS: bindings::dialog(hwnd); return; // saves on OK
+    case ID_CONTROLS: {
+        std::wstring t = L"Mouse: look (click the picture to capture it; pausing lets go of it)\n\n";
+        int n;
+        const bindings::Action *acts = bindings::actions(&n);
+        for (int i = 0; i < n; i++) {
+            std::wstring k1 = bindings::key_name(bindings::key(i, 0)), k2 = bindings::key_name(bindings::key(i, 1));
+            if (k1.empty() && k2.empty()) continue;
+            t += std::wstring(acts[i].name) + L": " + k1 + (k1.empty() || k2.empty() ? L"" : L" / ") + k2 + L"\n";
+        }
+        t += L"\nMenus: arrow keys, Enter = select, Backspace = back; Esc frees the mouse. A controller works too.\n"
+             L"Input > Key bindings changes the keys.\n\n"
+             L"F3 / F4: mouse sensitivity      F5 / F6: gain      F7 / F8: gamma\n"
+             L"F9: anti-aliasing      F10: render size      F11: fullscreen\n"
+             L"F2: performance recording      F12: dump the next frame (bug reports)";
+        MessageBoxW(hwnd, t.c_str(), L"BLACK - controls", MB_OK | MB_ICONINFORMATION);
         return;
+    }
     case ID_ABOUT:
         MessageBoxW(hwnd,
                     L"BLACK PC port " _CRT_WIDE(BLACK_VERSION) L"\n\nRuns your own copy of the original Xbox game (default.xbe) natively, with the Xbox "

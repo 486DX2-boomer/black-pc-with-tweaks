@@ -40,6 +40,7 @@ void __cdecl ml_sway(uint8_t *ctrl);
 namespace {
 
 bool g_installed;
+std::atomic<uint32_t> g_play_frame; // the frame of the last player update (ml_sway runs once in each)
 
 // 0x1BD6A8: addss xmm3, [esi+0x18]  (xmm3 = this frame's stick yaw step; xmm2 = zoom factor)
 __declspec(naked) void yaw_thunk()
@@ -118,8 +119,11 @@ void install_mouselook_patches()
 
 bool mouselook_installed() { return g_installed; }
 
+uint32_t mouselook_play_frame() { return g_play_frame; }
+
 extern "C" void __cdecl ml_sway(uint8_t *ctrl)
 {
+    g_play_frame = std::max(1u, g_frame_count.load());
     static float sh, sv; // smoothed deflections
     auto f = [&](uint32_t off) { return *(const float *)(ctrl + off); };
     float dt = *(const float *)(uintptr_t)(*(const uint32_t *)(uintptr_t)0x002D45D4 + 0x1C);

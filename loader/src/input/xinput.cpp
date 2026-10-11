@@ -1,13 +1,10 @@
 // HLE replacement for the Xbox input library (XPP section: USB host controller + XID gamepads).
 // Xbox port 0 is fed by every PC XInput controller, merged with keyboard and mouse while the game window has
-// focus. The user's layout:
-//   mouse = look (rotates the player directly, input/mouselook.cpp; a click in the window captures the mouse,
-//   Alt+Tab releases it); left button = right trigger, right button = right stick click,
-//   wheel up / down = D-pad left / right (one press per notch)
-//   WASD = left stick, R = A, F = B, E = X, Q = Y, G = left trigger, C = left stick click, Z / X = D-pad up / down,
-//   Enter = START, Space = BACK (select), arrows = D-pad (menus). BLACK and WHITE have no keys (unused).
+// focus: the mouse rotates the view directly (input/mouselook.cpp; a click in the window captures the mouse),
+// keys and mouse buttons are bound to the game's actions (input/bindings.cpp, Input > Key bindings).
 #include "d3d/dispatch.h"
 #include "d3d/host.h"
+#include "input/bindings.h"
 #include "input/mouselook.h"
 
 #include <algorithm>
@@ -75,8 +72,6 @@ void load_xinput()
     logf("[input] PC XInput %s; keyboard mapping active when the game window has focus", g_pc_get ? "loaded" : "not available");
 }
 
-bool key(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
-
 // --press "frame:button,..." or "SECONDSs:button,...": scripted presses for unattended test runs, held for
 // 10 frames, or 300 ms when timed in seconds since the first input poll. "button*MS" holds for MS
 // milliseconds; lx/ly/rx/ry+NN or -NN pushes a stick to NN percent (e.g. "80s:rx+25*2000"); mx/my+NN or -NN
@@ -137,6 +132,7 @@ void apply_presses(XGamepad &g)
         }
         if (b.size() > 3 && b[0] == 'm' && (b[1] == 'x' || b[1] == 'y') && (b[2] == '+' || b[2] == '-'))
             (b[1] == 'x' ? g_script_mx : g_script_my) += atoi(b.c_str() + 2);
+        if (b.size() > 2 && b[0] == 'k' && b[1] == ':') bindings::script_hold(b.substr(2)); // a bound key
         if (b == "up") g.wButtons |= 0x01;
         else if (b == "down") g.wButtons |= 0x02;
         else if (b == "left") g.wButtons |= 0x04;
@@ -173,12 +169,11 @@ void merge_stick(int16_t &x, int16_t &y, int16_t px, int16_t py)
 }
 
 // Mouse: movement since the previous poll (the game polls once per frame) becomes this frame's rotation
-// (input/mouselook.cpp); buttons and the wheel feed the triggers and buttons listed at the top.
-void mouse_look(XGamepad &g, bool focus)
+// (input/mouselook.cpp); buttons and the wheel are bindable keys (input/bindings.cpp). Returns the wheel notches.
+int mouse_look(bool live)
 {
     int dx, dy, wheel;
     host3d::mouse_take(&dx, &dy, &wheel);
-    bool live = focus && host3d::mouse_captured();
     if (!live) dx = dy = wheel = 0;
     dx += g_script_mx; // scripted moves work without focus
     dy += g_script_my;
@@ -186,28 +181,7 @@ void mouse_look(XGamepad &g, bool focus)
     // The game's yaw rate is positive to the left and its pitch rate positive downwards (mouse dy > 0 = towards
     // the user = look down).
     mouselook_set_frame(-dx * k, (g_cfg.mouse_invert ? -dy : dy) * k);
-    if (!live) return;
-
-    int b = host3d::mouse_buttons();
-    if (b & 1) g.bAnalogButtons[7] = 255; // left = right trigger
-    if (b & 2) g.wButtons |= 0x80;        // right = right stick click
-    // Each wheel notch is one D-pad press (up = left, down = right): held 2 polls, then 2 released so quick
-    // notches stay separate presses.
-    static int pending, hold, gap; // pending: notches, + = up/left, - = down/right
-    static uint16_t held;
-    pending = std::clamp(pending + wheel, -4, 4);
-    if (hold) {
-        hold--;
-        g.wButtons |= held;
-        if (!hold) gap = 2;
-    } else if (gap) {
-        gap--;
-    } else if (pending) {
-        held = pending > 0 ? 0x04 : 0x08; // D-pad left / right
-        pending += pending > 0 ? -1 : 1;
-        hold = 1;
-        g.wButtons |= held;
-    }
+    return wheel;
 }
 
 // The game plays on Xbox port 0; every connected PC controller (any XInput user index) feeds it, so a
@@ -241,30 +215,9 @@ void read_pad(uint32_t port, XGamepad &g)
     }
     apply_presses(g);
     bool focus = GetForegroundWindow() == host3d::window();
-    mouse_look(g, focus);
-    if (!focus) return;
-    if (key(VK_UP)) g.wButtons |= 0x01;
-    if (key(VK_DOWN)) g.wButtons |= 0x02;
-    if (key(VK_LEFT)) g.wButtons |= 0x04;
-    if (key(VK_RIGHT)) g.wButtons |= 0x08;
-    if (key('Z')) g.wButtons |= 0x01;        // D-pad up
-    if (key('X')) g.wButtons |= 0x02;        // D-pad down
-    if (key(VK_RETURN)) g.wButtons |= 0x10;  // START
-    if (key(VK_SPACE)) g.wButtons |= 0x20;   // BACK (select)
-    if (key('C')) g.wButtons |= 0x40;        // left stick click
-    if (key('R')) g.bAnalogButtons[0] = 255; // A
-    if (key('F')) g.bAnalogButtons[1] = 255; // B
-    if (key('E')) g.bAnalogButtons[2] = 255; // X
-    if (key('Q')) g.bAnalogButtons[3] = 255; // Y
-    if (key('G')) g.bAnalogButtons[6] = 255; // left trigger
-    // Keys push the stick fully, unless a pad already pushes that axis further.
-    auto push = [](int16_t &axis, int16_t v) {
-        if (abs(v) > abs(axis)) axis = v;
-    };
-    if (key('A')) push(g.sThumbLX, -32767);
-    if (key('D')) push(g.sThumbLX, 32767);
-    if (key('W')) push(g.sThumbLY, 32767);
-    if (key('S')) push(g.sThumbLY, -32767);
+    bool live = focus && host3d::mouse_captured();
+    int wheel = mouse_look(live);
+    bindings::apply(g.wButtons, g.bAnalogButtons, g.sThumbLX, g.sThumbLY, g.sThumbRX, g.sThumbRY, focus, live, wheel);
 }
 
 } // namespace
