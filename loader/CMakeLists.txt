@@ -24,6 +24,7 @@ add_library(blackrt SHARED
   src/xthread.cpp
   src/hooks.cpp
   src/timing.cpp
+  src/fov.cpp
   src/input/mouselook.cpp
   src/input/autoaim.cpp
   src/input/bindings.cpp

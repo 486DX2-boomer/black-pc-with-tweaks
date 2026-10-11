@@ -6,6 +6,7 @@
 
 #include "common.h"
 #include "d3d/device.h"
+#include "fov.h"
 #include "input/autoaim.h"
 #include "input/bindings.h"
 #include "perf.h"
@@ -32,6 +33,10 @@ void check(HMENU bar, UINT id, bool on) { CheckMenuItem(bar, id, MF_BYCOMMAND | 
 void radio(HMENU bar, UINT first, UINT last, UINT on) { CheckMenuRadioItem(bar, first, last, on, MF_BYCOMMAND); }
 
 bool close_to(float a, float b) { return a > b - 0.01f && a < b + 0.01f; }
+
+// Field of view presets (horizontal degrees; fov.cpp). 86 in widescreen shows the height of the 4:3 picture.
+const float kFovs[] = {70, 75, 80, 86, 90, 95, 100, 105, 110};
+static_assert(sizeof kFovs / sizeof kFovs[0] == ID_FOV_LAST - ID_FOV_FIRST + 1, "one menu ID per preset");
 
 void set_render(bool native, float factor, int height)
 {
@@ -97,6 +102,13 @@ HMENU build()
     item(res, ID_RES_2160, L"2160p (4K)");
     sep(res);
     item(res, ID_RES_DEFAULT, L"Default (3 x Xbox, --scale)");
+    HMENU fov = CreatePopupMenu();
+    AppendMenuW(video, MF_POPUP, (UINT_PTR)fov, L"Field of &view");
+    for (UINT i = 0; i <= ID_FOV_LAST - ID_FOV_FIRST; i++) {
+        wchar_t text[64];
+        swprintf(text, 64, L"%.0f°%s", kFovs[i], kFovs[i] == 70 ? L" (original)" : kFovs[i] == 86 ? L" (4:3 height in widescreen)" : L"");
+        item(fov, ID_FOV_FIRST + i, text);
+    }
     HMENU aspect = CreatePopupMenu();
     AppendMenuW(video, MF_POPUP, (UINT_PTR)aspect, L"Aspect &ratio (after restart)");
     item(aspect, ID_WIDE, L"Widescreen 16:9");
@@ -177,11 +189,18 @@ void update(HMENU bar, bool fullscreen)
     for (UINT id = ID_SENS_1; id <= ID_SENS_4; id++) check(bar, id, id == s);
     check(bar, ID_INVERT, g_cfg.mouse_invert);
     check(bar, ID_NO_AUTOAIM, !g_cfg.autoaim);
+    for (UINT i = 0; i <= ID_FOV_LAST - ID_FOV_FIRST; i++) check(bar, ID_FOV_FIRST + i, close_to(g_cfg.fov, kFovs[i]));
     check(bar, ID_PERF_RECORD, perf::recording());
 }
 
 void command(HWND hwnd, UINT id)
 {
+    if (id >= ID_FOV_FIRST && id <= ID_FOV_LAST) { // live: the game reads it every frame in play
+        g_cfg.fov = kFovs[id - ID_FOV_FIRST];
+        fov_set(g_cfg.fov);
+        settings_save();
+        return;
+    }
     switch (id) {
     case ID_AA: g_cfg.aa = !g_cfg.aa; break;
     case ID_SEAMFILL: g_cfg.seam_fill = !g_cfg.seam_fill; break;

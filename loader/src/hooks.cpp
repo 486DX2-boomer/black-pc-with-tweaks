@@ -151,10 +151,12 @@ LONG CALLBACK vectored_handler(EXCEPTION_POINTERS *ep)
             uint32_t n = ++g_probe_hits[i];
             if (n <= 50) {
                 XThread *t = xthread_current_or_null();
-                logf("probe %08x %s #%u, thread '%s': eax=%08lx ebx=%08lx ecx=%08lx edx=%08lx esi=%08lx edi=%08lx | ret %08x args %08x %08x "
-                     "%08x %08x %08x",
+                float xmm0 = 0.0f; // FXSAVE image: XMM0 at byte 160
+                if ((c->ContextFlags & CONTEXT_EXTENDED_REGISTERS) == CONTEXT_EXTENDED_REGISTERS) memcpy(&xmm0, c->ExtendedRegisters + 160, 4);
+                logf("probe %08x %s #%u, thread '%s': eax=%08lx ebx=%08lx ecx=%08lx edx=%08lx esi=%08lx edi=%08lx xmm0=%g | ret %08x args "
+                     "%08x %08x %08x %08x %08x",
                      g_cfg.probe[i], where(g_cfg.probe[i]).c_str(), n, t ? t->name : "host", c->Eax, c->Ebx, c->Ecx, c->Edx, c->Esi,
-                     c->Edi, s[0], s[1], s[2], s[3], s[4], s[5]);
+                     c->Edi, xmm0, s[0], s[1], s[2], s[3], s[4], s[5]);
             }
             *(uint8_t *)(uintptr_t)g_cfg.probe[i] = g_probe_orig[i]; // run the original instruction once
             c->Eip = g_cfg.probe[i];

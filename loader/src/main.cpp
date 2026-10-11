@@ -1,9 +1,11 @@
 // blackrt.dll entry: BlackMain is called by black.exe (the address-space stub) and never returns.
 #include "common.h"
 
+#include <algorithm>
 #include <vector>
 
 #include "d3d/dispatch.h"
+#include "fov.h"
 #include "hooks.h"
 #include "image.h"
 #include "timing.h"
@@ -83,6 +85,7 @@ void usage()
            "  --mouse-sens K    mouse look sensitivity, K x 0.022 degrees per count (default 2.0; F3/F4 adjust live)\n"
            "  --mouse-invert    mouse forward looks down\n"
            "  --no-autoaim      turn off the game's auto-aim (the view pulling toward enemies)\n"
+           "  --fov D           horizontal field of view in play, 50-120 degrees (default 70, the game's; Video menu)\n"
            "  --gain K          output gain after the game's gamma ramp (default 1.0; F5/F6 adjust live)\n"
            "  --no-ramp         ignore the game's gamma ramp (no fades, half brightness: the raw framebuffer)\n"
            "  --no-aa           no anti-aliasing (default: edge-directed post filter; F9 toggles)\n"
@@ -192,7 +195,12 @@ bool parse_args()
             if (g_cfg.mouse_sens < 0.05f || g_cfg.mouse_sens > 50.0f) g_cfg.mouse_sens = 2.0f;
         } else if (a == L"--mouse-invert") { g_cfg.mouse_invert = true; settings_mark_cli("mouse_invert"); }
         else if (a == L"--no-autoaim") { g_cfg.autoaim = false; settings_mark_cli("autoaim"); }
-        else if (a == L"--timer-vblank") g_cfg.timer_vblank = true;
+        else if (a == L"--fov") {
+            settings_mark_cli("fov");
+            std::wstring v;
+            if (!next(v)) return false;
+            g_cfg.fov = std::clamp((float)_wtof(v.c_str()), 50.0f, 120.0f);
+        } else if (a == L"--timer-vblank") g_cfg.timer_vblank = true;
         else if (a == L"--display-vblank") g_cfg.display_vblank = true;
         else if (a == L"--perf-at") {
             if (!next(g_cfg.perf_at)) return false;
@@ -421,6 +429,7 @@ int run(void *reserve, unsigned reserve_size)
     if (known_build) install_timing_patches();
     if (known_build) install_mouselook_patches();
     if (known_build) install_autoaim_patch();
+    if (known_build) install_fov_patch();
     if (known_build && g_cfg.fps == 60 && !install_60fps_patches()) g_cfg.fps = 30;
     if (!kdpc_init()) {
         logf("could not start the kernel DPC/timer thread");

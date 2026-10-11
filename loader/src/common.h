@@ -72,6 +72,7 @@ struct Config {
     bool effects_native = false; // the small effect buffers at their Xbox size (Video menu); default: render scale, smoothed
     bool seam_fill = true;     // fill hairline cracks between geometry pieces (Video menu, --no-seamfill)
     bool autoaim = true;       // the game's view pull toward targets (input/autoaim.cpp; --no-autoaim, menu)
+    float fov = 70.0f;         // horizontal field of view in play, degrees (fov.cpp; --fov, Video menu; the game's is 70)
     int fps = 30;              // --fps 60: swap interval TWO paced as ONE and the world steps 1/60 s (timing.cpp);
                                // not the default yet: weapon fire still runs per frame (twice as fast)
     // Menu choices for widescreen and fps, which the game reads at boot: saved to black.ini for the next run while

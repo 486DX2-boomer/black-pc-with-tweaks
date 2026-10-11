@@ -35,6 +35,8 @@ Open work on the BLACK PC port. Findings and addresses live in `NOTES.md`; this 
       the last core with its sibling idle. Laptop crash at the first level (256-byte immediate-mode vertices on Intel) fixed;
       user played the first level through on the laptop. Re-record there at 30 and 60 fps to see what the changes gave. Next: VS constants only when changed (broke the
       picture, see NOTES), cache converted vertices in host buffers, log writes off the render thread, game CPU other than CPU 0.
+- [ ] Field of view (Video > Field of view, `--fov`): feel in play, aiming and scopes (aimed FOV = setting / zoom),
+      cutscene transitions back to the player's view.
 - [ ] Reverb (bin 11 send into an FDN reverb): level and character against the Xbox (`--reverb-gain`).
 
 ## Next

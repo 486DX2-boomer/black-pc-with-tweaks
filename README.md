@@ -16,7 +16,7 @@ played through; later missions have had less testing. Please report problems in 
 `black.log`.
 
 - Any render resolution (720p to 4K and beyond, or a multiple of the window size), anti-aliasing
-- Widescreen 16:9 (the game's own widescreen mode) or 4:3
+- Widescreen 16:9 (the game's own widescreen mode) or 4:3, adjustable field of view
 - 30 fps (the original) or 60 fps (experimental)
 - Mouse look, with the weapon swaying as it does with the stick; keys bound to the game's actions; XInput
   controllers
@@ -102,13 +102,17 @@ In menus the arrow keys move, Enter selects and Backspace goes back. Help > Cont
 
 ## Settings
 
-The window's menu bar holds the port's settings: render resolution, anti-aliasing, fullscreen, aspect ratio, frame
-rate, brightness, seam filling, reverb, key bindings, mouse sensitivity and inversion, auto-aim. Most apply at once; aspect ratio
+The window's menu bar holds the port's settings: render resolution, anti-aliasing, fullscreen, field of view, aspect
+ratio, frame rate, brightness, seam filling, reverb, key bindings, mouse sensitivity and inversion, auto-aim. Most apply at once; aspect ratio
 and frame rate are read by the game when it starts, so a new choice is used from the next start. Choices are saved to
 `black.ini`.
 
 `black.exe --help` lists the command-line options. They override `black.ini` for that run, for example
-`--fullscreen`, `--resolution 1080`, `--fps 60`, `--normal-aspect`, `--no-autoaim`, `--mouse-sens 2.5`.
+`--fullscreen`, `--resolution 1080`, `--fps 60`, `--fov 86`, `--normal-aspect`, `--no-autoaim`, `--mouse-sens 2.5`.
+
+Field of view (Video > Field of view, `--fov`) is horizontal, in degrees; the game's is 70. The widescreen picture
+keeps that width and shows less height than 4:3; 86 shows the same height as the 4:3 picture. Aiming zooms by the
+same factor as before, cutscenes keep their own framing.
 
 ## Known issues
 
