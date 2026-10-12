@@ -10,6 +10,7 @@
 #include "d3d/pushbuf.h"
 #include "d3d/state.h"
 #include "d3d/vshader.h"
+#include "fov.h"
 #include "perf.h"
 
 #include <wincodec.h>
@@ -603,7 +604,7 @@ void linear_texture_scale(int stage, float *sx, float *sy)
 void upload_vs_constants(IDirect3DDevice9 *d)
 {
     d->SetVertexShaderConstantF(0, &g_st.vs_constants[0][0], 192);
-    float k[32] = {};
+    float k[36] = {};
     host_viewport_transform(k, k + 4);
     for (int s = 0; s < 4; s++) {
         linear_texture_scale(s, &k[8 + s * 4], &k[9 + s * 4]);
@@ -620,7 +621,9 @@ void upload_vs_constants(IDirect3DDevice9 *d)
     case D3DFOG_EXP2: k[30] = 1.0f; break;
     default: k[31] = 1.0f; break;
     }
-    d->SetVertexShaderConstantF(192, k, 8);
+    k[32] = k[33] = fov_viewmodel_scale(); // c200: the first-person gun keeps the game's FOV
+    k[34] = k[35] = 1.0f;
+    d->SetVertexShaderConstantF(192, k, 9);
 }
 
 // Fixed-function path: express the same scaling as a texture transform (when the game sets none).
@@ -650,6 +653,25 @@ struct DrawCtx {
 // --debug-draws N: describe the first N draws (vertex data, constants, key states).
 std::atomic<int> g_debug_draws{-1};
 
+// The game code above a draw: return addresses into the XBE's game code found on the stack (values right after a
+// call instruction), nearest first. A heuristic, like the profiler's: stale values happen.
+std::string game_callers(const uint32_t *sp)
+{
+    const uint32_t *top = (const uint32_t *)((NT_TIB *)NtCurrentTeb())->StackBase;
+    std::string out;
+    int found = 0;
+    for (const uint32_t *p = sp; p < top && p < sp + 0x800 && found < 5; p++) {
+        uint32_t v = *p;
+        if (v < 0x00011005 || v >= 0x00269000) continue; // game code (.text and the libraries before D3D)
+        const uint8_t *c = (const uint8_t *)(uintptr_t)v;
+        bool call = c[-5] == 0xE8 || (c[-2] == 0xFF && (c[-1] & 0x38) == 0x10) || (c[-3] == 0xFF && (c[-2] & 0x38) == 0x10) ||
+                    (c[-6] == 0xFF && (c[-5] & 0x38) == 0x10);
+        if (!call) continue;
+        out += (found++ ? " < " : "") + sym_name(v);
+    }
+    return out;
+}
+
 void debug_draw(const char *what, const DrawCtx &ctx, uint32_t prim, uint32_t count, const float *verts, uint32_t stride_floats)
 {
     if (g_debug_draws < 0) g_debug_draws = (int)g_cfg.debug_draws;
@@ -662,6 +684,7 @@ void debug_draw(const char *what, const DrawCtx &ctx, uint32_t prim, uint32_t co
     const uint32_t *rs = render_state();
     logf("[draw] %s prim %u count %u, %s 0x%x, ps 0x%x, tex0 %p", what, prim, count, ctx.path == Path::Prog ? "vs" : "fvf",
          g_st.vertex_shader, g_st.pixel_shader, g_st.textures[0]);
+    if (this_frame) logf("[draw]   from %s", game_callers((const uint32_t *)_AddressOfReturnAddress()).c_str());
     logf("[draw]   z %u func 0x%x write %u | blend %u 0x%x/0x%x op 0x%x | atest %u func 0x%x ref %u | cull 0x%x | cwrite 0x%x | stencil %u",
          rs[XRS_ZENABLE], rs[XRS_ZFUNC], rs[XRS_ZWRITEENABLE], rs[XRS_ALPHABLENDENABLE], rs[XRS_SRCBLEND], rs[XRS_DESTBLEND],
          rs[XRS_BLENDOP], rs[XRS_ALPHATESTENABLE], rs[XRS_ALPHAFUNC], rs[XRS_ALPHAREF], rs[XRS_CULLMODE], rs[XRS_COLORWRITEENABLE],

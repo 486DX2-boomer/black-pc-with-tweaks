@@ -211,6 +211,7 @@ std::string vsh_to_hlsl(const uint32_t *program, uint32_t count, uint32_t input_
          "float4 texScale[4] : register(c194);\n" // 1/size for linear textures (NV2A uses texel coordinates)
          "float4 fogParams : register(c198);\n"   // start, end, density
          "float4 fogMode : register(c199);\n"     // weights: linear, exp, exp2, none (oFog is the factor)
+         "float4 vmScale : register(c200);\n"     // clip x/y factor: the first-person gun at the game's FOV (fov.cpp)
          "struct VSIn {\n";
     bool any_input = false;
     for (int i = 0; i < 16; i++)
@@ -331,6 +332,7 @@ std::string vsh_to_hlsl(const uint32_t *program, uint32_t count, uint32_t input_
          "  float w = (oPos.w == 0.0 || !(abs(oPos.w) < 3.0e38)) ? 1.0 : oPos.w;\n"
          "  o.pos.w = w;\n"
          "  o.pos.xyz = (oPos.xyz - vpOffset.xyz) / vpScale.xyz * w;\n"
+         "  o.pos.xy *= vmScale.xy;\n"
          "  o.d0 = oD0; o.d1 = oD1;\n"
          "  o.t0 = oT0 * float4(texScale[0].xy, 1, 1); o.t1 = oT1 * float4(texScale[1].xy, 1, 1);\n"
          "  o.t2 = oT2 * float4(texScale[2].xy, 1, 1); o.t3 = oT3 * float4(texScale[3].xy, 1, 1);\n"

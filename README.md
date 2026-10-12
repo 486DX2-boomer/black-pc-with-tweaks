@@ -112,7 +112,8 @@ and frame rate are read by the game when it starts, so a new choice is used from
 
 Field of view (Video > Field of view, `--fov`) is horizontal, in degrees; the game's is 70. The widescreen picture
 keeps that width and shows less height than 4:3; 86 shows the same height as the 4:3 picture. Aiming zooms by the
-same factor as before, cutscenes keep their own framing.
+same factor as before, cutscenes keep their own framing, and the gun and hands keep the game's own view (they were
+made for 70 and their animations would show their ends at a wider view).
 
 The game lets you skip a movie only once you have earned it (the intro and a mission's movies after completing that
 mission, the logos never). The port lets A, START or Enter skip every movie; untick Game > Skip any movie (or start

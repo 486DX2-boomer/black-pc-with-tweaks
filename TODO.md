@@ -38,7 +38,7 @@ Open work on the BLACK PC port. Findings and addresses live in `NOTES.md`; this 
 - [ ] Skip any movie (default; Game menu, `--no-movie-skip`): mission movies later in the game, end-of-mission movies,
       credits.
 - [ ] Field of view (Video > Field of view, `--fov`): feel in play, aiming and scopes (aimed FOV = setting / zoom),
-      cutscene transitions back to the player's view.
+      cutscene transitions back to the player's view; gun and hands at the game's view (reload, weapon switch, melee).
 - [ ] Reverb (bin 11 send into an FDN reverb): level and character against the Xbox (`--reverb-gain`).
 
 ## Next
