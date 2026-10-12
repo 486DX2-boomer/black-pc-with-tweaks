@@ -18,6 +18,7 @@
 #include "common.h"
 #include "d3d/host.h"
 #include "input/mouselook.h"
+#include "settings.h"
 
 #include <algorithm>
 #include <bitset>
@@ -343,7 +344,7 @@ void apply(uint16_t &buttons, uint8_t analog[8], int16_t &lx, int16_t &ly, int16
         if (held(VK_BACK)) p.analog[1] = 255; // B
         menu_esc = held(VK_ESCAPE);
     }
-    // The pause key in play and Esc in menus also let go of the mouse (to reach the menu bar); play starting or
+    // The pause key in play and Esc in menus also let go of the mouse; play starting or
     // resuming takes it again.
     bool release = play ? pause_down : menu_esc;
     if (release && !g_release_was_down && host3d::mouse_captured()) {
@@ -362,4 +363,73 @@ void apply(uint16_t &buttons, uint8_t analog[8], int16_t &lx, int16_t &ly, int16
     }
 }
 
+
+// ---- in-game capture (game thread) ----
+namespace {
+int g_cap_action = -1, g_cap_slot;
+bool g_cap_wait_up, g_cap_changed;
+
+bool candidate(int vk) // keys that can be bound: mouse buttons and keyboard keys, Shift/Ctrl/Alt as left/right
+{
+    if (vk == 3 || vk == VK_SHIFT || vk == VK_CONTROL || vk == VK_MENU || vk == VK_LWIN || vk == VK_RWIN) return false;
+    return vk >= 1 && vk <= 0xFE;
+}
+} // namespace
+
+void capture_start(int action, int slot)
+{
+    if (action < 0 || action >= kCount || fixed(action, slot)) return;
+    g_cap_action = action;
+    g_cap_slot = slot;
+    g_cap_wait_up = true;
+    logf("[input] key bindings: press a key for %ls (key %d)", kActions[action].name, slot + 1);
+}
+
+bool capturing() { return g_cap_action >= 0; }
+
+bool capture_take_change()
+{
+    bool c = g_cap_changed;
+    g_cap_changed = false;
+    return c;
+}
+
+bool capture_poll(bool focus, int wheel)
+{
+    if (g_cap_action < 0) return false;
+    ensure_defaults();
+    uint16_t pressed = 0;
+    bool any = false;
+    for (int vk = 1; vk <= 0xFE; vk++) {
+        bool down = g_script[vk] || (focus && (GetAsyncKeyState(vk) & 0x8000)); // tests: --press-file k:Name
+        if (!candidate(vk) || !down) continue;
+        any = true;
+        if (!pressed && !reserved((uint16_t)vk)) pressed = (uint16_t)vk;
+    }
+    g_script.reset(); // apply() does not run while capturing
+    if (g_cap_wait_up) { // the key that started the capture is still down
+        if (!any) g_cap_wait_up = false;
+        return true;
+    }
+    if (!pressed && wheel && focus) pressed = wheel > 0 ? KEY_WHEEL_UP : KEY_WHEEL_DOWN;
+    if (!pressed) return true;
+    int a = g_cap_action, s = g_cap_slot;
+    g_cap_action = -1;
+    g_cap_changed = true;
+    for (uint16_t k : {VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT, VK_RETURN, VK_BACK, VK_ESCAPE})
+        if (focus && (GetAsyncKeyState(k) & 0x8000)) g_stale[k] = true; // not also a menu press when capture ends
+    if (pressed == VK_ESCAPE) {
+        logf("[input] key bindings: cancelled");
+        return true;
+    }
+    uint16_t k = pressed == VK_DELETE ? 0 : pressed;
+    if (k)
+        for (int i = 0; i < kCount; i++)
+            for (int j = 0; j < kSlots; j++)
+                if ((i != a || j != s) && g_keys[i][j] == k && !fixed(i, j)) g_keys[i][j] = 0; // taken from that action
+    g_keys[a][s] = k;
+    settings_save();
+    logf("[input] key bindings: %ls key %d = %s", kActions[a].name, s + 1, k ? ini_name(k).c_str() : "none");
+    return true;
+}
 } // namespace bindings

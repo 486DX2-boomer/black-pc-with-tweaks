@@ -25,13 +25,18 @@ add_library(blackrt SHARED
   src/hooks.cpp
   src/timing.cpp
   src/fov.cpp
+  src/fe/calls.cpp
+  src/fe/vars.cpp
+  src/fe/pc_settings.cpp
+  src/fe/apt.cpp
+  src/fe/pages.cpp
+  src/fe/bind_list.cpp
+  src/fe/pause_ui.cpp
   src/input/mouselook.cpp
   src/input/autoaim.cpp
   src/input/bindings.cpp
   src/input/movies.cpp
-  src/d3d/bindings_dialog.cpp
   src/audio/reverb.cpp
-  src/d3d/menu.cpp
   src/settings.cpp
   src/perf.cpp
   src/sha1.cpp

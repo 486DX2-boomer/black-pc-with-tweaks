@@ -1,4 +1,4 @@
-// Port settings remembered between launches (black.ini in the game root): what the menu bar and the F-keys
+// Port settings remembered between launches (black.ini in the game root): what PC SETTINGS and the F-keys
 // change. Command-line flags win over the file for that session. Test runs (--background) neither read nor
 // write it.
 #pragma once

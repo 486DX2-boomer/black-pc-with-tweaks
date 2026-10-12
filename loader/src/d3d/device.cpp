@@ -21,6 +21,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <mutex>
+#include <string>
 #include <unordered_map>
 
 std::atomic<uint32_t> g_frame_count;
@@ -37,6 +39,9 @@ namespace {
 
 constexpr uint32_t PUSH_BYTES = 512 * 1024;
 uint32_t g_gpu_time;
+std::atomic<bool> g_shot_requested; // request_screenshot: taken at the next Swap
+std::mutex g_shot_lock;
+std::string g_shot_tag;
 Surface *g_backbuffer, *g_depthbuffer;
 Viewport g_requested_viewport = {0, 0, 640, 480, 0.0f, 1.0f}; // as the game last set it (before clamping)
 IDirect3DSurface9 *g_host_backbuffer, *g_host_depth;
@@ -1209,7 +1214,7 @@ void check_render_size()
             pos = comma + 1;
         }
     }
-    if (g_render_request.exchange(false)) { // the menu bar chose a render size
+    if (g_render_request.exchange(false)) { // PC SETTINGS or F10 chose a render size
         RECT frame, pic;
         host3d::frame_layout(&frame, &pic);
         g_native_w = pic.right - pic.left;
@@ -1267,6 +1272,10 @@ uint32_t __stdcall D3DDevice_Swap(uint32_t Flags)
         char tag[32];
         snprintf(tag, sizeof tag, "f%u_screen", frames);
         screenshot_now(tag);
+    }
+    if (g_shot_requested.exchange(false)) { // tests: --press-file "shot:name"
+        std::lock_guard<std::mutex> lk(g_shot_lock);
+        screenshot_now(g_shot_tag.c_str());
     }
     static ULONGLONG t0 = GetTickCount64();
     static const bool periodic = !g_cfg.screenshot_dir.empty(); // --screenshot given (F12 sets the folder later)
@@ -1733,6 +1742,13 @@ const Hle *hle_device_table(size_t *count)
 {
     *count = sizeof kTable / sizeof kTable[0];
     return kTable;
+}
+
+void request_screenshot(const char *tag)
+{
+    std::lock_guard<std::mutex> lk(g_shot_lock);
+    g_shot_tag = tag;
+    g_shot_requested = true;
 }
 
 } // namespace xd3d

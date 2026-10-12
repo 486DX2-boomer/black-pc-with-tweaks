@@ -1,4 +1,4 @@
-// Performance recorder (Tools > Record performance, F2; --perf-at for scripted runs).
+// Performance recorder (F2; --perf-at for scripted runs).
 //
 // While recording: per-frame timings and counters on the game's render thread (the thread that calls
 // D3DDevice_Swap), a sampling profiler of that thread (~1 kHz, from a thread off the game CPU) and the CPU

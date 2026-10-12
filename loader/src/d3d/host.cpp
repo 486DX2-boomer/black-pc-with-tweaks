@@ -1,12 +1,14 @@
 #include "d3d/host.h"
 
-#include "d3d/menu.h"
 #include "settings.h"
 #include "perf.h"
 
-#include <algorithm>
+#include <shellapi.h>
 
-// Common controls 6 (themed buttons and message boxes, the key bindings list): a manifest dependency the linker
+#include <algorithm>
+#include <string>
+
+// Common controls 6 (themed message boxes): a manifest dependency the linker
 // embeds in blackrt.dll as resource 2; ui_thread activates it for every window it makes.
 #pragma comment(linker, "\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' " \
                         "processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
@@ -26,7 +28,6 @@ int g_aspect_w = 4, g_aspect_h = 3; // the picture's shape; the window keeps it 
 int g_bb_w, g_bb_h;                 // host back buffer: the largest monitor, so any window size is drawn 1:1
 int g_frame_w, g_frame_h;           // the part of the back buffer the current frame uses
 WINDOWPLACEMENT g_windowed_place = {sizeof(WINDOWPLACEMENT)};
-HMENU g_menu; // the menu bar (hidden in fullscreen)
 
 // Mouse: raw input counts and buttons, used only while the cursor is captured (click the window; focus loss
 // releases it). The click that captures is not passed to the game.
@@ -34,6 +35,7 @@ std::atomic<bool> g_captured{false};
 std::atomic<int> g_mouse_dx, g_mouse_dy, g_wheel, g_buttons;
 bool g_hold_left; // the capturing click: masked until released
 constexpr UINT WM_APP_CAPTURE = WM_APP + 0x52; // wParam: 1 = capture, 0 = release (request_capture)
+constexpr UINT WM_APP_FULLSCREEN = WM_APP + 0x53; // wParam: 1 = fullscreen, 0 = windowed (set_fullscreen)
 
 // Borderless window over the whole monitor, or back to the window it was.
 void toggle_fullscreen()
@@ -45,14 +47,12 @@ void toggle_fullscreen()
             !GetMonitorInfoW(MonitorFromWindow(g_hwnd, MONITOR_DEFAULTTOPRIMARY), &mi))
             return;
         SetWindowLongW(g_hwnd, GWL_STYLE, (style & ~WS_OVERLAPPEDWINDOW) | WS_POPUP);
-        SetMenu(g_hwnd, nullptr);
         g_cfg.fullscreen = true;
         SetWindowPos(g_hwnd, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left,
                      mi.rcMonitor.bottom - mi.rcMonitor.top, SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
         logf("host: fullscreen %ldx%ld", mi.rcMonitor.right - mi.rcMonitor.left, mi.rcMonitor.bottom - mi.rcMonitor.top);
     } else {
         SetWindowLongW(g_hwnd, GWL_STYLE, (style & ~WS_POPUP) | WS_OVERLAPPEDWINDOW);
-        SetMenu(g_hwnd, g_menu);
         g_cfg.fullscreen = false;
         SetWindowPlacement(g_hwnd, &g_windowed_place);
         SetWindowPos(g_hwnd, nullptr, 0, 0, 0, 0,
@@ -140,6 +140,20 @@ void raw_input(HRAWINPUT h)
     }
 }
 
+bool is_fullscreen() { return !(GetWindowLongW(g_hwnd, GWL_STYLE) & WS_OVERLAPPEDWINDOW); }
+
+// A performance recording was saved (perf.cpp): windowed, offer to open its folder; fullscreen, the title says it.
+void perf_report(HWND hwnd)
+{
+    if (is_fullscreen() || g_cfg.background) return;
+    std::wstring text = widen(perf::last_report_text());
+    text += L"\n\nSaved in ";
+    text += perf::last_report_dir();
+    text += L"\n\nOpen the folder?";
+    if (MessageBoxW(hwnd, text.c_str(), L"Performance recording", MB_YESNO | MB_ICONINFORMATION) == IDYES)
+        ShellExecuteW(hwnd, L"open", perf::last_report_dir(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+
 LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
@@ -148,28 +162,16 @@ LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         settings_save(); // also what the F-keys changed
         request_exit(0, "window closed");
         return 0;
-    case WM_COMMAND:
-        if (HIWORD(wp) == 0) { // a menu item
-            UINT id = LOWORD(wp);
-            if (id == menu::ID_EXIT) PostMessageW(h, WM_CLOSE, 0, 0);
-            else if (id == menu::ID_FULLSCREEN) {
-                toggle_fullscreen();
-                settings_save();
-            } else if (id == menu::ID_RELEASE_MOUSE) capture_mouse(false);
-            else menu::command(h, id);
-            return 0;
+    case WM_APP_FULLSCREEN: // PC SETTINGS > VIDEO > FULLSCREEN (fe/pc_settings.cpp)
+        if ((wp != 0) != is_fullscreen()) {
+            toggle_fullscreen();
+            settings_save();
         }
-        break;
+        return 0;
     case perf::WM_APP_PERF:
         capture_mouse(false);
-        menu::perf_report(h, (GetWindowLongW(h, GWL_STYLE) & WS_OVERLAPPEDWINDOW) != 0);
+        perf_report(h);
         return 0;
-    case WM_INITMENUPOPUP:
-        if (g_menu) menu::update(g_menu, !(GetWindowLongW(h, GWL_STYLE) & WS_OVERLAPPEDWINDOW));
-        break;
-    case WM_ENTERMENULOOP:
-        capture_mouse(false); // the cursor has to reach the menu
-        break;
     case WM_DESTROY:
         PostQuitMessage(0);
         return 0;
@@ -204,7 +206,7 @@ LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         else if (GetForegroundWindow() == h && !IsIconic(h)) capture_mouse(true);
         return 0;
     case WM_SYSCOMMAND:
-        if ((wp & 0xFFF0) == SC_KEYMENU) return 0; // Alt / F10 must not enter the menu bar by keyboard and stall input
+        if ((wp & 0xFFF0) == SC_KEYMENU) return 0; // Alt / F10 must not open the system menu by keyboard and stall input
         break;
     case WM_LBUTTONDOWN:
         capture_mouse(true);
@@ -250,10 +252,9 @@ DWORD WINAPI ui_thread(void *)
     RegisterClassW(&wc);
     RECT r = {0, 0, g_win_w, g_win_h};
     DWORD style = WS_OVERLAPPEDWINDOW;
-    g_menu = menu::build();
-    AdjustWindowRect(&r, style, TRUE); // the client area keeps its size below the menu bar
+    AdjustWindowRect(&r, style, FALSE);
     g_hwnd = CreateWindowExW(0, wc.lpszClassName, L"BLACK", style, CW_USEDEFAULT, CW_USEDEFAULT, r.right - r.left,
-                             r.bottom - r.top, nullptr, g_menu, wc.hInstance, nullptr);
+                             r.bottom - r.top, nullptr, nullptr, wc.hInstance, nullptr);
     RAWINPUTDEVICE mouse = {0x01, 0x02, 0, g_hwnd}; // generic desktop / mouse, while the window has focus
     if (!RegisterRawInputDevices(&mouse, 1, sizeof mouse)) logf("host: raw mouse input not available (%lu)", GetLastError());
     ShowWindow(g_hwnd, g_cfg.background ? SW_SHOWMINNOACTIVE : SW_SHOWNORMAL);
@@ -354,6 +355,13 @@ void request_capture(bool on)
 {
     if (g_hwnd) PostMessageW(g_hwnd, WM_APP_CAPTURE, on ? 1 : 0, 0);
 }
+
+void set_fullscreen(bool on)
+{
+    if (g_hwnd) PostMessageW(g_hwnd, WM_APP_FULLSCREEN, on ? 1 : 0, 0);
+}
+
+bool fullscreen() { return g_hwnd && is_fullscreen(); }
 
 int mouse_buttons() { return g_captured ? g_buttons.load() : 0; }
 

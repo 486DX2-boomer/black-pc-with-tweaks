@@ -20,8 +20,9 @@ played through; later missions have had less testing. Please report problems in 
 - 60 fps (the default) or the original 30 fps
 - Mouse look, with the weapon swaying as it does with the stick; keys bound to the game's actions; XInput
   controllers
-- Borderless fullscreen (F11), a menu bar for the port's settings, saved to `black.ini`
-- Room reverb, the game's own brightness and gamma ramp; auto-aim off (Game menu); every movie can be skipped
+- The port's settings in the game's own menus (Options > PC SETTINGS, and in the pause menu), saved to `black.ini`;
+  borderless fullscreen (F11)
+- Room reverb, the game's own brightness and gamma ramp; auto-aim off by default; every movie can be skipped
 - Fixes for things the Xbox hides by its low resolution: flickering seams between pieces of destructible objects,
   a grid pattern in the blur effects
 
@@ -60,14 +61,15 @@ Windows.
 4. Start `black.exe`.
 
 The port keeps its files in that folder: `hdd\` holds the Xbox hard disk (saved games and settings), `black.ini` the
-port's settings and `black.log` the log of the last run. The game folder can also be somewhere else:
+port's settings, `black.log` the log of the last run and `cache\menus` the game's menu files with the PC SETTINGS
+pages added (made again at every start from the files in `game`). The game folder can also be somewhere else:
 `black.exe D:\Games\Black\game` (the port's own files then go into the current folder). Only the game window opens;
 `black.log` records the details of each run.
 
 ## Controls
 
 Keys and mouse buttons are bound to the game's own actions, not to controller buttons, and can be changed in
-Input > Key bindings (two keys per action, saved to `black.ini`). Controllers work as well. Click the window to
+PC SETTINGS > CONTROLS > KEY BINDINGS (two keys per action, saved to `black.ini`). Controllers work as well. Click the window to
 capture the mouse; Esc lets go of it (in play it also pauses), and play starting or resuming takes it again.
 
 | Action | Default |
@@ -87,7 +89,8 @@ capture the mouse; Esc lets go of it (in play it also pauses), and play starting
 | Show objectives | Space |
 | Pause | Esc |
 
-In menus the arrow keys move, Enter selects and Backspace goes back. Help > Controls lists the current keys.
+In menus the arrow keys move, Enter selects and Backspace goes back. On the KEY BINDINGS page left / right choose the
+first or second key and Enter waits for the new one (Esc cancels, Delete clears it).
 
 | Key | Port function |
 |---|---|
@@ -102,10 +105,18 @@ In menus the arrow keys move, Enter selects and Backspace goes back. Help > Cont
 
 ## Settings
 
-The window's menu bar holds the port's settings: render resolution, anti-aliasing, fullscreen, field of view, aspect
-ratio, frame rate, brightness, seam filling, reverb, key bindings, mouse sensitivity and inversion, auto-aim, skipping movies. Most apply at once; aspect ratio
-and frame rate are read by the game when it starts, so a new choice is used from the next start. Choices are saved to
-`black.ini`.
+The port's settings are in the game's menus: Options > PC SETTINGS on the main menu, and PC SETTINGS in the pause
+menu (below OPTIONS).
+
+| Page | Settings |
+|---|---|
+| VIDEO | render resolution, anti-aliasing, field of view, brightness, gamma, fullscreen |
+| DISPLAY | aspect ratio, frame rate (main menu only: used from the next start), filling geometry seams, effects at Xbox size |
+| AUDIO AND GAME | room reverb, auto-aim, skipping any movie |
+| CONTROLS | mouse sensitivity, mouse inversion, key bindings |
+
+Left / right change a setting; field of view, brightness, gamma and mouse sensitivity are sliders. Changes apply at
+once and are saved to `black.ini`. `--no-pc-menus` leaves the game's menus as they are.
 
 `black.exe --help` lists the command-line options. They override `black.ini` for that run, for example
 `--fullscreen`, `--resolution 1080`, `--fps 30`, `--fov 86`, `--normal-aspect`, `--autoaim`, `--mouse-sens 2.5`.

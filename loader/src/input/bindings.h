@@ -14,7 +14,7 @@ enum : uint16_t { KEY_NONE = 0, KEY_WHEEL_UP = 0x100, KEY_WHEEL_DOWN = 0x101 };
 
 struct Action {
     const char *ini;     // black.ini: key_<ini> = Key[,Key]
-    const wchar_t *name; // shown in the dialog
+    const wchar_t *name; // shown on the KEY BINDINGS page (upper case)
     int game;            // the action's index in the game's binding table
     uint16_t defaults[kSlots];
 };
@@ -22,7 +22,7 @@ const Action *actions(int *count);
 uint16_t key(int action, int slot);
 void set_key(int action, int slot, uint16_t k);
 void reset_defaults();
-bool fixed(int action, int slot); // Esc is always the first pause key (the dialog cancels with it)
+bool fixed(int action, int slot); // Esc is always the first pause key (it also cancels a key capture)
 bool reserved(uint16_t k);        // F2-F12: the port's own keys
 std::wstring key_name(uint16_t k);
 
@@ -37,6 +37,14 @@ bool in_play(); // the player is being updated (not a menu, pause or cutscene)
 // Tests: --press "SECONDSs:k:Name" holds a key (black.ini spelling) for the next poll, without focus.
 void script_hold(const std::string &name);
 
-void dialog(void *owner_hwnd); // Input > Key bindings... (d3d/bindings_dialog.cpp)
+// In-game key capture (the KEY BINDINGS page, fe/bind_list.cpp): the next key or mouse button pressed after all are
+// released binds to (action, slot) and is taken from any other action; Esc cancels, Delete clears the slot, F2-F12 are
+// ignored. Meanwhile keys reach neither the game nor the menus. capture_poll() runs once per pad poll before apply()
+// and returns true while capturing (apply() is skipped then); wheel: notches, also while the mouse is not captured.
+void capture_start(int action, int slot);
+bool capturing();
+bool capture_poll(bool focus, int wheel);
+bool capture_take_change(); // true once after a capture ended (the page refreshes its rows)
+
 
 } // namespace bindings

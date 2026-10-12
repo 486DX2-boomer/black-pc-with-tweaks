@@ -68,7 +68,7 @@ void settings_save()
     std::lock_guard<std::mutex> g(g_lock);
     FILE *f = nullptr;
     if (_wfopen_s(&f, kFile, L"w") || !f) return;
-    fprintf(f, "# BLACK PC port settings (written by the menu bar and on exit; command-line flags override them)\n");
+    fprintf(f, "# BLACK PC port settings (written by PC SETTINGS and on exit; command-line flags override them)\n");
     if (g_cfg.render_native) fprintf(f, "render = native\n");
     else if (g_cfg.render_h) fprintf(f, "render = %d\n", g_cfg.render_h);
     else fprintf(f, "render = scale\n");

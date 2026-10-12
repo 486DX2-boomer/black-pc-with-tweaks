@@ -1,8 +1,9 @@
 // HLE replacement for the Xbox input library (XPP section: USB host controller + XID gamepads).
 // Xbox port 0 is fed by every PC XInput controller, merged with keyboard and mouse while the game window has
 // focus: the mouse rotates the view directly (input/mouselook.cpp; a click in the window captures the mouse),
-// keys and mouse buttons are bound to the game's actions (input/bindings.cpp, Input > Key bindings).
+// keys and mouse buttons are bound to the game's actions (input/bindings.cpp, PC SETTINGS > CONTROLS > KEY BINDINGS).
 #include "d3d/dispatch.h"
+#include "d3d/draw.h"
 #include "d3d/host.h"
 #include "input/bindings.h"
 #include "input/mouselook.h"
@@ -116,6 +117,58 @@ void parse_presses()
     if (!g_presses.empty()) logf("[input] %zu scripted presses", g_presses.size());
 }
 
+// --press-file: a test driver appends lines while the game runs: a press as in --press without the time ("k:Enter",
+// "a", "lx+80*500"), or "shot:NAME" for a screenshot of the next whole frame. Presses read together are 250 ms apart.
+void read_press_file(uint32_t now_ms)
+{
+    static ULONGLONG next_check;
+    static long long pos;
+    static uint32_t queue_end;
+    if (g_cfg.press_file.empty() || GetTickCount64() < next_check) return;
+    next_check = GetTickCount64() + 50;
+    HANDLE h = CreateFileW(g_cfg.press_file.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                           nullptr, OPEN_EXISTING, 0, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return;
+    LARGE_INTEGER size = {};
+    GetFileSizeEx(h, &size);
+    if (size.QuadPart > pos) {
+        std::string buf((size_t)(size.QuadPart - pos), '\0');
+        LARGE_INTEGER p;
+        p.QuadPart = pos;
+        SetFilePointerEx(h, p, nullptr, FILE_BEGIN);
+        DWORD got = 0;
+        ReadFile(h, buf.data(), (DWORD)buf.size(), &got, nullptr);
+        buf.resize(got);
+        size_t last = buf.rfind('\n');
+        if (last != std::string::npos) {
+            pos += (long long)last + 1;
+            uint32_t at = std::max(now_ms, queue_end);
+            for (size_t s = 0; s <= last;) {
+                size_t e = buf.find('\n', s);
+                std::string line = buf.substr(s, e - s);
+                s = e + 1;
+                while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
+                if (line.empty()) continue;
+                if (line.rfind("shot:", 0) == 0) {
+                    xd3d::request_screenshot(line.substr(5).c_str());
+                    continue;
+                }
+                uint32_t hold = 150;
+                size_t star = line.find('*');
+                if (star != std::string::npos) {
+                    hold = (uint32_t)atoi(line.c_str() + star + 1);
+                    line.resize(star);
+                }
+                g_presses.push_back({at, true, line, hold});
+                logf("[input] press-file '%s' at %u ms", line.c_str(), at);
+                at += std::max(250u, hold + 100);
+            }
+            queue_end = at;
+        }
+    }
+    CloseHandle(h);
+}
+
 void apply_presses(XGamepad &g)
 {
     parse_presses();
@@ -123,6 +176,7 @@ void apply_presses(XGamepad &g)
     uint32_t f = g_frame_count;
     if (!g_first_poll_ms) g_first_poll_ms = GetTickCount64();
     uint32_t ms = (uint32_t)(GetTickCount64() - g_first_poll_ms);
+    read_press_file(ms);
     for (const Press &p : g_presses) {
         if (p.timed ? (ms < p.frame || ms >= p.frame + p.hold_ms) : (f < p.frame || f >= p.frame + 10)) continue;
         const std::string &b = p.button;
@@ -171,10 +225,11 @@ void merge_stick(int16_t &x, int16_t &y, int16_t px, int16_t py)
 
 // Mouse: movement since the previous poll (the game polls once per frame) becomes this frame's rotation
 // (input/mouselook.cpp); buttons and the wheel are bindable keys (input/bindings.cpp). Returns the wheel notches.
-int mouse_look(bool live)
+int mouse_look(bool live, int *raw_wheel)
 {
     int dx, dy, wheel;
     host3d::mouse_take(&dx, &dy, &wheel);
+    *raw_wheel = wheel; // the key bindings page takes the wheel without the mouse captured
     if (!live) dx = dy = wheel = 0;
     dx += g_script_mx; // scripted moves work without focus
     dy += g_script_my;
@@ -217,8 +272,10 @@ void read_pad(uint32_t port, XGamepad &g)
     apply_presses(g);
     bool focus = GetForegroundWindow() == host3d::window();
     bool live = focus && host3d::mouse_captured();
-    int wheel = mouse_look(live);
-    bindings::apply(g.wButtons, g.bAnalogButtons, g.sThumbLX, g.sThumbLY, g.sThumbRX, g.sThumbRY, focus, live, wheel);
+    int raw_wheel;
+    int wheel = mouse_look(live, &raw_wheel);
+    if (!bindings::capture_poll(focus, raw_wheel)) // while the key bindings page waits for a key, keys bind instead
+        bindings::apply(g.wButtons, g.bAnalogButtons, g.sThumbLX, g.sThumbLY, g.sThumbRX, g.sThumbRY, focus, live, wheel);
     movies_poll(g.wButtons, g.bAnalogButtons);
 }
 

@@ -21,5 +21,6 @@ bool save_screenshot(const wchar_t *path);
 bool save_surface_png(IDirect3DSurface9 *src, const wchar_t *path, bool alpha_as_gray, const RECT *crop = nullptr);
 // --screenshot <dir>: save "<dir>\<tag>.png" now (no-op without the option).
 void screenshot_now(const char *tag);
+void request_screenshot(const char *tag); // tests: "<dir>\<tag>.png" of the next whole frame (any thread)
 
 } // namespace xd3d

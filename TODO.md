@@ -16,14 +16,17 @@ Open work on the BLACK PC port. Findings and addresses live in `NOTES.md`; this 
 - [ ] Widescreen (default; the game's own 16:9 mode, `--normal-aspect` for 4:3): menus, HUD, videos, briefings.
 - [ ] Window resizing at a fixed aspect, F11 fullscreen, black bars when maximised.
 - [x] Mouse look: rotates the view directly (user: "feels awesome").
-- [ ] Seams of destructible objects: vertex snap 1/8 Xbox pixel + seam fill pass (Video menu); user to confirm.
+- [ ] Seams of destructible objects: vertex snap 1/8 Xbox pixel + seam fill pass (PC SETTINGS > DISPLAY); user to confirm.
 - [ ] Weapon sway with mouse look (the gun swivels like with the stick): user to check the feel and amount.
-- [ ] Auto-aim switch (Game > Disable auto-aim; default off since 2026-10-12, `--autoaim`): confirm in play that the view
-      no longer drifts onto enemies with it ticked, and that nothing else changes.
-- [ ] Key bindings (keys bound to the game's actions, Input > Key bindings): play with them; Esc pauses and frees
+- [ ] Auto-aim switch (PC SETTINGS > AUDIO AND GAME; default off since 2026-10-12, `--autoaim`): confirm in play that
+      the view no longer drifts onto enemies with it off, and that nothing else changes.
+- [ ] Key bindings (keys bound to the game's actions, PC SETTINGS > CONTROLS > KEY BINDINGS): play with them; Esc pauses and frees
       the mouse, resuming takes it again. The game's on-screen button prompts still show pad buttons.
-- [ ] Aspect ratio / frame rate in the menu: a notice, the choice saved for the next run, nothing changes until
-      then (checked with a scripted run; black.ini writing is skipped in --background, confirm in play).
+- [ ] Aspect ratio / frame rate (main menu PC SETTINGS > DISPLAY only): the choice shows NEXT START, is saved for the
+      next run, and nothing changes until then (confirm in play).
+- [ ] PC SETTINGS pages (2026-10-12): every row on the main menu and in the pause menu, the sliders, KEY BINDINGS
+      (scrolling, capture, reset), FULLSCREEN from the menu. The pause page loads into a small heap: open it in every
+      mission (a null allocation for PseMenu.bin would hang the pause menu; NOTES.md).
 - [ ] 60 fps (the default since 2026-10-12, `--fps 30` = original): world step 1/60 s, audio fine, weapon refire and reload blur now match
       30 fps (measured). Check the rest in play: other weapons/fire modes, animations, AI, effects, scripted scenes;
       60 became the default (user).
@@ -37,7 +40,7 @@ Open work on the BLACK PC port. Findings and addresses live in `NOTES.md`; this 
       picture, see NOTES), cache converted vertices in host buffers, log writes off the render thread, game CPU other than CPU 0.
 - [ ] Skip any movie (default; Game menu, `--no-movie-skip`): mission movies later in the game, end-of-mission movies,
       credits.
-- [ ] Field of view (Video > Field of view, `--fov`): feel in play, aiming and scopes (aimed FOV = setting / zoom),
+- [ ] Field of view (PC SETTINGS > VIDEO, `--fov`): feel in play, aiming and scopes (aimed FOV = setting / zoom),
       cutscene transitions back to the player's view; gun and hands at the game's view (reload, weapon switch, melee).
 - [ ] Reverb (bin 11 send into an FDN reverb): level and character against the Xbox (`--reverb-gain`).
 
@@ -49,11 +52,11 @@ Open work on the BLACK PC port. Findings and addresses live in `NOTES.md`; this 
       (Also checks: glow and light cones look as on the Xbox; nothing else renders into small targets.)
 - [ ] Resolution: better downsampling when the render size is much larger than the window (box filter instead of
       one bilinear tap).
-- [x] Rebindable keys: bound to the game's actions (Input > Key bindings, black.ini).
+- [x] Rebindable keys: bound to the game's actions (PC SETTINGS > CONTROLS > KEY BINDINGS, black.ini).
 - [x] Settings remembered between launches (black.ini: render size, AA, fps, aspect, fullscreen, gain/gamma, mouse, reverb).
 - [ ] Also remember the window size and position.
-- [x] Port options in a Windows menu bar (vanilla port). In-game Apt menu entries: later, when modifying the game
-      (scoping in NOTES.md, "Front end / custom menu options").
+- [x] Port options in the game's own menus: Options > PC SETTINGS and the pause menu (built at start from the user's
+      files, src/fe/; NOTES.md "PC SETTINGS in the game's menus"). The Windows menu bar is gone.
 
 ## Audio
 

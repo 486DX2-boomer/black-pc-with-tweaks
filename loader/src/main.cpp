@@ -5,6 +5,8 @@
 #include <vector>
 
 #include "d3d/dispatch.h"
+#include "fe/calls.h"
+#include "fe/pages.h"
 #include "fov.h"
 #include "hooks.h"
 #include "image.h"
@@ -85,8 +87,9 @@ void usage()
            "  --mouse-sens K    mouse look sensitivity, K x 0.022 degrees per count (default 2.0; F3/F4 adjust live)\n"
            "  --mouse-invert    mouse forward looks down\n"
            "  --autoaim         the game's auto-aim (the view pulling toward enemies), off by default; --no-autoaim\n"
-           "  --fov D           horizontal field of view in play, 50-120 degrees (default 70, the game's; Video menu)\n"
+           "  --fov D           horizontal field of view in play, 50-120 degrees (default 70, the game's; PC SETTINGS > VIDEO)\n"
            "  --no-movie-skip   movies skip only as in the original (default: A / START skip every movie)\n"
+           "  --no-pc-menus     no PC SETTINGS pages in the game's Options menu (built at start into cache\\menus)\n"
            "  --gain K          output gain after the game's gamma ramp (default 1.0; F5/F6 adjust live)\n"
            "  --no-ramp         ignore the game's gamma ramp (no fades, half brightness: the raw framebuffer)\n"
            "  --no-aa           no anti-aliasing (default: edge-directed post filter; F9 toggles)\n"
@@ -202,7 +205,12 @@ bool parse_args()
             std::wstring v;
             if (!next(v)) return false;
             g_cfg.fov = std::clamp((float)_wtof(v.c_str()), 50.0f, 120.0f);
+        } else if (a == L"--game-override") {
+            if (!next(g_cfg.game_override)) return false;
+        } else if (a == L"--press-file") {
+            if (!next(g_cfg.press_file)) return false;
         } else if (a == L"--no-movie-skip") { g_cfg.skip_movies = false; settings_mark_cli("skipanymovie"); }
+        else if (a == L"--no-pc-menus") g_cfg.pc_menus = false;
         else if (a == L"--timer-vblank") g_cfg.timer_vblank = true;
         else if (a == L"--display-vblank") g_cfg.display_vblank = true;
         else if (a == L"--perf-at") {
@@ -434,6 +442,11 @@ int run(void *reserve, unsigned reserve_size)
     if (known_build) install_mouselook_patches();
     if (known_build) install_autoaim_patch();
     if (known_build) install_fov_patch();
+    if (known_build) install_fe_calls();
+    if (known_build && g_cfg.pc_menus) { // the in-game PC SETTINGS pages, from the user's own front-end file
+        std::wstring cache = host_full_path(L"cache\\menus");
+        if (fe_build_pages(host_full_path(g_cfg.game_dir), cache)) g_cfg.menu_cache = cache;
+    }
     if (g_cfg.fps == 60 && (!known_build || !install_60fps_patches())) g_cfg.fps = 30; // other builds: no 60 fps patches
     if (!kdpc_init()) {
         logf("could not start the kernel DPC/timer thread");

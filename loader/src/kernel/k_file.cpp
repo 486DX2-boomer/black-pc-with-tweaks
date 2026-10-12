@@ -67,6 +67,8 @@ std::string lower(std::string s)
     return s;
 }
 
+std::wstring full_path(const std::wstring &p);
+
 struct Resolved {
     std::string xbox_path; // canonical device path
     const Mount *mount = nullptr;
@@ -124,6 +126,17 @@ NTSTATUS resolve(HANDLE root, const XANSI_STRING *name, Resolved &r)
     for (char &c : rest)
         if (c == '/') c = '\\';
     r.host_nt = L"\\??\\" + best->host + widen(rest);
+    // --game-override, then the port's rebuilt menus: a file of the same relative path there replaces the game's
+    if (best->partition == -1 && !rest.empty())
+        for (const std::wstring *root : {&g_cfg.game_override, &g_cfg.menu_cache}) {
+            if (root->empty()) continue;
+            std::wstring alt = full_path(*root) + widen(rest);
+            DWORD a = GetFileAttributesW(alt.c_str());
+            if (a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY)) {
+                r.host_nt = L"\\??\\" + alt;
+                break;
+            }
+        }
     return XSTATUS_SUCCESS;
 }
 
@@ -361,8 +374,12 @@ NTSTATUS __stdcall NtReadFile(HANDLE FileHandle, HANDLE Event, void *ApcRoutine,
                                   ByteOffset, nullptr);
     KTRACE("%p '%s', ev %p, apc %p, %p, len 0x%x, off %lld) -> 0x%08x (", FileHandle, handle_desc(FileHandle).c_str(), Event,
            ApcRoutine, Buffer, Length, ByteOffset ? ByteOffset->QuadPart : -1LL, s);
-    if (!NT_OK(s) && s != XSTATUS_PENDING && s != (NTSTATUS)0xC0000011 /* END_OF_FILE */)
-        logf("[k] NtReadFile('%s', len 0x%x) failed 0x%08x", handle_desc(FileHandle).c_str(), Length, s);
+    if (!NT_OK(s) && s != XSTATUS_PENDING && s != (NTSTATUS)0xC0000011 /* END_OF_FILE */) {
+        MEMORY_BASIC_INFORMATION mi = {}; // a buffer too small for the file: where its memory ends
+        VirtualQuery(Buffer, &mi, sizeof mi);
+        logf("[k] NtReadFile('%s', len 0x%x) failed 0x%08x (buffer %p, region %p + 0x%zx, state 0x%x)", handle_desc(FileHandle).c_str(),
+             Length, s, Buffer, mi.BaseAddress, mi.RegionSize, (unsigned)mi.State);
+    }
     return s;
 }
 
@@ -686,3 +703,5 @@ NTSTATUS __stdcall NtQuerySymbolicLinkObject(HANDLE LinkHandle, XANSI_STRING *Li
 }
 
 } // namespace xk
+
+std::wstring host_full_path(const std::wstring &p) { return full_path(p); }

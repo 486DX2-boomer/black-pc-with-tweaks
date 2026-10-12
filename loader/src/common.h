@@ -69,12 +69,16 @@ struct Config {
     bool mouse_invert = false;
     bool timer_vblank = false; // --timer-vblank: free-running 59.94 Hz vblank instead of following the display
     bool display_vblank = false; // --display-vblank (tests): follow the display even with --background
-    bool effects_native = false; // the small effect buffers at their Xbox size (Video menu); default: render scale, smoothed
-    bool seam_fill = true;     // fill hairline cracks between geometry pieces (Video menu, --no-seamfill)
-    bool autoaim = false;      // the game's view pull toward targets, off by default (input/autoaim.cpp; --autoaim, menu)
-    float fov = 70.0f;         // horizontal field of view in play, degrees (fov.cpp; --fov, Video menu; the game's is 70)
-    bool skip_movies = true;   // A / START skip any movie, also unseen ones (input/movies.cpp; --no-movie-skip, menu)
+    bool effects_native = false; // the small effect buffers at their Xbox size (PC SETTINGS); default: render scale, smoothed
+    bool seam_fill = true;     // fill hairline cracks between geometry pieces (PC SETTINGS, --no-seamfill)
+    bool autoaim = false;      // the game's view pull toward targets, off by default (input/autoaim.cpp; --autoaim, PC SETTINGS)
+    float fov = 70.0f;         // horizontal field of view in play, degrees (fov.cpp; --fov, PC SETTINGS; the game's is 70)
+    bool skip_movies = true;   // A / START skip any movie, also unseen ones (input/movies.cpp; --no-movie-skip, PC SETTINGS)
     bool known_build = false;  // the XBE is the NTSC-U build the address tables are for (main.cpp)
+    std::wstring game_override; // --game-override: files there replace the game's of the same relative path
+    std::wstring menu_cache;    // the port's rebuilt front-end files (fe/pages.cpp), served like --game-override after it
+    bool pc_menus = true;       // build the in-game PC SETTINGS pages (--no-pc-menus: the game's own menus only)
+    std::wstring press_file;    // --press-file (tests): presses and screenshot requests appended by a driver
     int fps = 60;              // 60 (default): swap interval TWO paced as ONE, world step 1/60 s, weapon refire kept at
                                // whole 1/30 s steps (timing.cpp); --fps 30 = the original
     // Menu choices for widescreen and fps, which the game reads at boot: saved to black.ini for the next run while
@@ -122,6 +126,7 @@ void logc(const char *fmt, ...); // the log file and the console: startup, setup
 [[noreturn]] void fatal(const char *fmt, ...);
 std::string narrow(const std::wstring &w);
 std::wstring widen(const std::string &s);
+std::wstring host_full_path(const std::wstring &p); // absolute (kernel/k_file.cpp)
 
 // Request process exit; the host main thread performs it.
 void request_exit(int code, const char *why);

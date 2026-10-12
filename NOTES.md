@@ -140,3 +140,136 @@ Decomp target is functionally equivalent C++, not byte-matching (the XDK compile
 - **Front end / custom menu options (scoping, 2026-10-05).** The menus are EA's "Apt" UI (Flash-derived; `export/frontend/FEMain.bin` = "Apt Data:7" with ActionScript packages `__Packages.BkMenuList`, `BkMenuButton`). Screens in it: legalscreen, bootsequence, blacktitlemenu, choosedifficulty, controllersetup, missionmodeselect, resultsscreen, operatorprofile, memcard*, createblackprofile, profileoptions, fmvplayer, credits, virtualkeyboard, unlocks, feaudio, pressstart, controllercustomxbox, **optionsmenuxbox**, **soundsetupxbox**, **picturesetupxbox**. An option is movie clips + localised text (`$FE_VIBRATION`, `$FE_INVERTLOOK`, strings in language/strings/MainUS.bin) that reach game code through named callbacks registered with FUN_00112FC0 (ecx = name, pushed function; e.g. `SetGammaLevel` -> FUN_00119970 at 0x119B37) and UI variables (FUN_000BF2A0, e.g. `FEGammaLevel` = settings * 100). Two routes for port options (render size, AA, fps, gain, mouse): (a) add entries to the Apt screens - needs an Apt reader/writer for the movie data and bytecode, new strings, and new callbacks registered like `SetGammaLevel`; the modified file would be built at run time from the user's FEMain.bin (nothing game-derived in the repo); (b) an overlay menu drawn by the loader on top of the game (D3D9, keyboard/controller, game input paused while open), plus a settings file - far less work, independent of the game data. **Chosen for now (user): a Windows menu bar on the game window, so the port stays vanilla; modifying the game's own menus comes after the vanilla port is done.** `src/d3d/menu.cpp`: Game (Exit), Video (Fullscreen F11, Anti-aliasing F9, Render resolution: 1 / 1.5 / 2 x window, 720p/1080p/1440p/2160p, default; Aspect ratio and Frame rate - after restart, the game reads them at boot; Brightness gain/gamma), Audio (reverb on/off, level 50-200%), Input (mouse sensitivity presets, invert, release mouse = Esc), Help (controls, about). Commands run on the window thread; render-size changes are handed to the render thread (`request_render_change` -> `check_render_size` after the next Swap). Hidden in fullscreen; opening it releases the captured mouse; Alt/F10 do not enter it by keyboard (SC_KEYMENU blocked so the game never stalls). Settings persist in `black.ini` in the game root (`src/settings.cpp`; written on every menu change and on window close, so F-key changes are kept too; command-line flags win for that session; `--background` test runs neither read nor write it; git-ignored). Tested by posting WM_COMMAND to a background run: 1080p switched live, AA toggled.
 - **To check (user, later): picture against the Xbox Series.** The gamma ramp fix (2026-10-05) is confirmed by the user for the fades and the in-game brightness slider (which never worked before; the user had noticed but not reported it). Still to compare: overall brightness and colours. Method: with the in-game brightness slider at the same position on both, take an Xbox Series screenshot (Share button) of a still screen - boot LOADING screen with the bullet casings, the title screen or the main menu - and the port's screenshot of the same screen (`--screenshot`), then compare pixel values (dark-green loading background, white text, gold logo). Possible remaining differences: anything the Series' backward-compatibility layer adds after the ramp, blur/bloom buffers rendered at 3x (sharper than a 640x480 original), shader arithmetic precision, TV vs monitor.
 - Next: check 60 fps game speed everywhere; decode the I3DL2 state of effect 16 (or match it against the library's SetI3DL2Listener conversion, 0x21B0C9) for the exact room; bins 17/18 and 27-30 effects.
+
+### In-game PC SETTINGS menu: work in progress (2026-10-12)
+
+- **Front-end calls to the port** (`loader/src/fe/calls.cpp`, uncommitted): a thunk at the dispatcher FUN_00112F30 entry.
+  Names starting with "PC" are handled by the port and cleared; game calls are logged as `fe: game call Name('p1','p2','p3')`.
+  Fields in the FE object: trigger +0x370, name +0x374 (32 bytes), params +0x394/+0x3D0/+0x40C (60 bytes each).
+  Callers of the dispatcher: 0x12465C and 0x1246CA. Scripts set `_global.externObject.FEFunctionName/Param1..3/Trigger`.
+  `PCDebug` logs its 3 params: the debug channel for generated scripts (scratchpad m1.py mode `dbg`).
+- **Options page rows** (optionsmenuxbox TextAnim, char 27). Frame 0 places the rows at depths 1/3/5/7, transparent
+  (color transform mult 0x00FFFFFF). The reveal is TextAnim's own timeline: frames 46/49/52/55 Move + CXForm each row
+  to opaque and place a flash bar (char 25/26, flags 0x16) at depths 9-21. A new object at an occupied depth gets
+  that frame's matrix. What works (milestone 1, scratchpad `m1.py row,wrap,page`):
+  - The new row at free depth 2 (cloned text → cloned sprite 6 → cloned sprite 7).
+  - Its own reveal at frame 58: a copy of frame 55's Move on depth 1, retargeted to depth 2, plus a bar at depth 22.
+  - Wrapped PagePrepare/PageRelease/PageDestruct create `pcButton` (BkMenuButton) in the up/down ring, with
+    `actionSelectPage = "PCSettings"`. The container entry "pcsettings" is a copy of soundsetupxbox.
+  The round trip Options → PC SETTINGS → Back has no crash.
+- **Text fields**: the game's text provider FUN_001184D0 reads the *variable* string (runtime text +0x54):
+  - `$KEY`: localized string, looked up by name hash (FUN_001F3A80, thiscall on *0x2D45D8).
+  - `&KEY`: bound to an entry of the FE variable table at *0x2D199C + 0x13A8: 0x70 entries
+    {type, value, hash, refs, watchers}, with a second table at +0x2DF4 (FUN_00112CC0). The same table holds
+    externObject's members. On a change, FUN_00114960 copies the value into each watching text instance (+0x28;
+    the list runs through +0x48).
+  - `#...`: something from FUN_001F3AC0.
+  - Anything else is shown literally. So a literal label goes in the variable (var 'PC SETTINGS'); an empty
+    variable shows nothing.
+- **Value tables** in the FE object (*0x2D199C): 0x70 entries from table +4, 0x14 bytes {type, value, hash (-1 free), refs,
+  first watcher}. Hash = FUN_000BF2A0: CRC-32 style, start -1, `sar`, table 0x2AC908.
+  - +0x2530: externObject members named "FE…"; FUN_00114050 resolves "HUD…" in +0x1C78 and other names in +0x13A8.
+    Type 1 = pointer to an int32 (FUN_001146A0); type 5 = char buffer (FEFunctionName, FUN_00114560).
+  - +0x13A8 / +0x2DF4: `&` text values; type 4 = pointer to UTF-16 (FUN_001145B0, FE_SOUNDTRACKNAME).
+  - The port keeps PC_V<n> (strings, +0x2DF4) and FEPCS<n> (ints, +0x2530) registered (loader `fe/vars.cpp`).
+- **Page classes** (AS2 in each page):
+  - BkListBox: SetId(n), SetGameFunction(name); left/right (FEInputId 3/4) → name(id, ∓1).
+  - BkMovieclipSlider(clip, name, start): range 0-100, step 100/(clip frames − 1) (Sound Setup's bar: 26 frames,
+    step 4); calls name(value) and gotoAndStop on the bar.
+  - BkMultiChoiceMenuButton(clip).mChoiceList = either of them; BkMenuList forwards input to it.
+  - BkMenuList back: mfuncFunctionBack (Options: SelectBack → StartAutosaveSettings), then mstrPageBack
+    (FETargetPage + FEChangePage). actionSelectPage / actionSelectGameCode on select.
+- **Container tail**: a movie's header +4/+8 = count / region-relative texture offsets, +0x14 = texture table
+  (block-relative), all after the geometry block (+0x18), texture data 0x80-aligned. Moving the geometry must move
+  all of it by a multiple of 0x80 (soundsetupxbox, picturesetupxbox, map, operatorprofile, pressstart, virtualkeyboard).
+- **PC SETTINGS pages work** (scratchpad `pages.py`, 2026-10-12):
+  - Options row → "pcsettings" (copy of Options, 4 rows) → pcvideo / pcdisplay / pcgame / pccontrols
+    (copies of Sound Setup).
+  - Choice rows are clones of the PLAY MODE row; slider rows are clones of the SFX row plus the bullet bar (char 34)
+    at 45 % with the number after it.
+  - Loader side: `fe/pc_settings.cpp` (rows, choices, apply + save), `PCChange(row, ±1)`, `PCSlider<row>(0-100)`.
+  - In-game (PseMenu/InGameOn) pages import Core/PAudio, not Common/FEAudio, and have BkValueList instead of
+    BkListBox, so they need their own template.
+
+### PC SETTINGS in the game's menus: state at the end of 2026-10-12 (loader `src/fe/`, not committed yet)
+
+- Built at every start from the user's own files into `cache\menus` (beside black.ini). The file layer serves it
+  after `--game-override`; `--no-pc-menus` turns it off. `fe/apt.cpp` edits containers; `fe/pages.cpp` builds the pages.
+- **Main menu** (FEMain.bin):
+  - Options → PC SETTINGS (copy of Options) → VIDEO / DISPLAY / AUDIO AND GAME / CONTROLS, each a copy of Sound
+    Setup. CONTROLS → KEY BINDINGS (scrolling list, `fe/bind_list.cpp`; capture in `input/bindings.cpp`).
+  - Each page reports PCPage(group | 100) when prepared; the port fills that page's values.
+- **Pause menu**:
+  - PC SETTINGS after OPTIONS (InGameOn.bin) opens ONE page "PCPageIG" (copy of the in-game Options, PseMenu.bin).
+  - Its six rows show the port's current screen (`fe/pause_ui.cpp`). State per row comes from externObject FEPCR<i>
+    (packed), FEPCLayout / FEPCFocus / FEPCAtRoot; a wrapped Update applies it every frame.
+  - One copy per screen did NOT fit: PseMenu.bin is loaded on demand into a heap with little room in play. At 1.06 MB
+    the game's allocation came back null (NtReadFile into 0 → hang); ~0.87 MB still loaded in mission 1. Keep the
+    pause file small.
+  - Aspect ratio and frame rate (restart-only) are on the main menu only.
+- **Value tables, measured** (min free of 112 in a run to mission 1):
+  - +0x2DF4 is filled to 0 by the game at the main menu. The port using it made the game's own string setter
+    FUN_001154A0 crash (NULL entry).
+  - +0x13A8: ≥ 84 free with the port's 19 strings → the port's strings live there.
+  - +0x2530 (FE members): 47 free; the port uses about 13 ints there.
+  - +0x1C78: 0 free (HUD).
+- **Page script facts**:
+  - FEInputId 1 up, 2 down, 3 left, 4 right, 5 select, 6 back.
+  - BkMenuList calls ProcessMapInput of the focused row's mChoiceList on every update (input 0 = none), after
+    moving the focus. MyMenu.MovedCursor is true when the focus moved.
+  - A button without actionSelect* treats select as Back.
+- **Still to do**:
+  - remove the Windows menu bar (and move or drop Tools / Help);
+  - README and controls text;
+  - commit when the user asks.
+
+### PC SETTINGS: soft lock going in and out of pages, crash at the first pause (fixed 2026-10-13)
+
+- **Soft lock:** going back and forth between PC SETTINGS entries quickly left a page with the selector showing but
+  no row focused, and Back dead (MyMenu undefined).
+  - Pages define their classes in main-timeline DoInitActions only `if (!_global.X)`: BkMenuList, BkMenuButton and,
+    by page, BkListBox, BkMovieclipSlider, BkMultiChoiceMenuButton, BkValueList, BkValuePoint. Prepare makes
+    `MyMenu = new BkMenuList`. Destruct deletes MyMenu, `_global.BkMenuList`, `_global.BkMenuButton` (some pages
+    also MyMap, BkMultiChoiceMenuButton, BkValueList, BkValuePoint; Sound Setup and Picture Setup never delete
+    BkListBox / BkMovieclipSlider / BkMultiChoiceMenuButton, so those stay in _global).
+  - A DoInitAction runs only when the runtime loads the movie. A page entered again ~1 s after it was left is still
+    loaded: it defines nothing, the page before had just deleted the classes, so Prepare makes no MyMenu.
+    Event log (BLACK_FE_DEBUG): old page's Destruct, then the new page's load seeing no `_global.BkMenuList`.
+    Destruct always came before the next page's load; page instances are not reused.
+- **Crash at the first pause** (user report, `FUN_000FC360+0x40` from `FUN_00112520`, reading through garbage):
+  the first soft-lock fix kept the classes in `_global.pcKeep*`. They survived leaving the front end; InGameOn's
+  pause menu set them again, releasing the last reference to a FEMain object whose memory the game had already
+  reused, and the release walked the freed movie.
+  - FUN_00112520 (FE update) holds a reference to every entry of the list at 0x2EC980 for the update and releases
+    them after; FUN_00019F20 destroys a refcounted 0x18-byte object; types 3/4/5 hold a movie (+0x10) that
+    FUN_000FC360 walks.
+  - Rule: nothing of a page may stay in `_global` after its container goes (FEMain.bin at a mission start, PseMenu.bin),
+    and a page must not release what another page left there.
+- **Crash at a second pause** (user report 2026-10-13, `FUN_0010D8D0+0x13` reading 0xA70): FUN_0010D8D0 runs a frame's
+  DoInitActions; the frame table read was 0xA70, the unrelocated offset of the main timeline's frames in
+  pausemenuoptionxbox / pcpageig. The pause page's own list class `_global.PcRow` (and the KEY BINDINGS page's
+  `_global.KeyList`) were never deleted. PseMenu.bin is loaded at each pause and was dropped during play (reloaded
+  at the second pause, not in a short test); the leftover kept the old page's entry, which was later run on the
+  reloaded, unrelocated data.
+  - Original pages leave classes too (Sound Setup: BkListBox, BkMovieclipSlider, BkMultiChoiceMenuButton; in-game
+    Options: BkMovieclipSlider). Overwriting those at every load would release them.
+- **Fix** (`fe/pages.cpp` own_classes_*, `Movie::define_classes_on_load`), on every page the port builds or changes:
+  - a DoAction first in frame 0 (`Movie::prepend_action`) keeps what `_global` held for each class (`pcPrev<class>`);
+  - the guarded class DoInitActions become DoActions placed before the frame's first DoAction, guard neutralised:
+    the classes are defined at every load; the page keeps them in page variables `pcOwn<class>`; PcRow and KeyList
+    count as the page's classes;
+  - Destruct runs the page's own Destruct0, then each class goes back to `pcPrev` where it is still the page's, or
+    stays as another page set it: `_global` is as the page found it;
+  - Update (safety net, not after Destruct): without MyMenu or its first button, the page puts its own classes back,
+    makes MyMenu again and re-runs PagePrepare (logs "a page's menu was gone").
+  - Tests on a copy of the user's save: main-menu stress (0.4 s in/out, same page re-entered), mission, pause →
+    PC SETTINGS stress, in-game Options, resume, pause, quit, main-menu PC pages again: no crash, no dead page.
+    The event log shows PcRow / KeyList gone after their pages. Not reproduced: PseMenu dropped during play (needs
+    moving through a level between pauses).
+- **Debug:** `BLACK_FE_DEBUG=1` adds PCDebug reports on input and an event log (PCLog: L load with which classes are
+  in `_global`, D Destruct, H heal, with an instance number). FE call parameters are 60-byte buffers the runtime fills without a bound: a longer
+  string overruns them (crashed with EIP = text). The script runtime has no `String.substr`.
+- **Values:** the port no longer walks a value's watcher chain (it can name text fields of a page that is gone). The
+  strings are written in place in fixed buffers; the port's entries hold 0x10000 references.
+- The Windows menu bar is gone. Fullscreen from PC SETTINGS is `host3d::set_fullscreen` (WM_APP + 0x53). The key
+  bindings dialog and menu.cpp were removed.
