@@ -66,6 +66,13 @@ pages added (made again at every start from the files in `game`). The game folde
 `black.exe D:\Games\Black\game` (the port's own files then go into the current folder). Only the game window opens;
 `black.log` records the details of each run.
 
+### Linux (Wine)
+
+Not tested yet. Put `black.sh` (in the zip) next to `black.exe` and run `sh black.sh`, or `chmod +x black.sh` once and
+then `./black.sh`. It needs Wine with 32-bit support and keeps its Wine prefix in `wineprefix/` beside it; arguments
+are passed to `black.exe`, Linux paths converted (`./black.sh /mnt/games/Black/game`). The comments at the top of
+`black.sh` list the options and what to try if the picture is wrong.
+
 ## Controls
 
 Keys and mouse buttons are bound to the game's own actions, not to controller buttons, and can be changed in

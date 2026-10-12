@@ -1,6 +1,7 @@
 # Packs the built loader into a release zip: dist\black-pc-<version>-win32.zip with black.exe, blackrt.dll,
-# README.md and LICENSE.txt. Nothing game-derived: the build's black.exe has no icon (tools\set_exe_icon.py only stamps
-# local copies). blackrt.pdb and blackrt.map go into a separate -symbols zip, kept to read crash reports of that build.
+# black.sh (Wine on Linux), README.md and LICENSE.txt. Nothing game-derived: the build's black.exe has no icon
+# (tools\set_exe_icon.py only stamps local copies). blackrt.pdb and blackrt.map go into a separate -symbols zip,
+# kept to read crash reports of that build.
 # Build first: cmake --build loader\build\win32 --config RelWithDebInfo
 param([string]$Config = 'RelWithDebInfo')
 $ErrorActionPreference = 'Stop'
@@ -19,6 +20,7 @@ $stage = Join-Path $env:TEMP "$name-$PID"
 $sym = "$stage-symbols"
 New-Item -ItemType Directory -Force $stage, $sym | Out-Null
 Copy-Item "$bin\black.exe", "$bin\blackrt.dll" $stage
+Copy-Item "$root\black.sh" $stage
 Copy-Item "$root\README.md" "$stage\README.md"
 Copy-Item "$root\LICENSE" "$stage\LICENSE.txt"
 Copy-Item "$bin\blackrt.pdb", "$bin\blackrt.map" $sym
