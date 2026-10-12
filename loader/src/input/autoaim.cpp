@@ -1,4 +1,4 @@
-// Auto-aim off switch (Game > Disable auto-aim, --no-autoaim).
+// Auto-aim switch, off by default (Game > Disable auto-aim, --autoaim / --no-autoaim).
 //
 // The game's auto-aim is a pull of the view toward a target, not bullet correction. Each player update
 // (FUN_001ec450, ebx = player controller), while a stick is moved (any look/move axis) or the button at

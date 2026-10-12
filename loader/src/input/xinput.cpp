@@ -6,6 +6,7 @@
 #include "d3d/host.h"
 #include "input/bindings.h"
 #include "input/mouselook.h"
+#include "input/movies.h"
 
 #include <algorithm>
 #include <cmath>
@@ -218,6 +219,7 @@ void read_pad(uint32_t port, XGamepad &g)
     bool live = focus && host3d::mouse_captured();
     int wheel = mouse_look(live);
     bindings::apply(g.wButtons, g.bAnalogButtons, g.sThumbLX, g.sThumbLY, g.sThumbRX, g.sThumbRY, focus, live, wheel);
+    movies_poll(g.wButtons, g.bAnalogButtons);
 }
 
 } // namespace

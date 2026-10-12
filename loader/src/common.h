@@ -71,10 +71,12 @@ struct Config {
     bool display_vblank = false; // --display-vblank (tests): follow the display even with --background
     bool effects_native = false; // the small effect buffers at their Xbox size (Video menu); default: render scale, smoothed
     bool seam_fill = true;     // fill hairline cracks between geometry pieces (Video menu, --no-seamfill)
-    bool autoaim = true;       // the game's view pull toward targets (input/autoaim.cpp; --no-autoaim, menu)
+    bool autoaim = false;      // the game's view pull toward targets, off by default (input/autoaim.cpp; --autoaim, menu)
     float fov = 70.0f;         // horizontal field of view in play, degrees (fov.cpp; --fov, Video menu; the game's is 70)
-    int fps = 30;              // --fps 60: swap interval TWO paced as ONE and the world steps 1/60 s (timing.cpp);
-                               // not the default yet: weapon fire still runs per frame (twice as fast)
+    bool skip_movies = true;   // A / START skip any movie, also unseen ones (input/movies.cpp; --no-movie-skip, menu)
+    bool known_build = false;  // the XBE is the NTSC-U build the address tables are for (main.cpp)
+    int fps = 60;              // 60 (default): swap interval TWO paced as ONE, world step 1/60 s, weapon refire kept at
+                               // whole 1/30 s steps (timing.cpp); --fps 30 = the original
     // Menu choices for widescreen and fps, which the game reads at boot: saved to black.ini for the next run while
     // the running session keeps the values above (0 / -1 = no change chosen).
     int fps_next = 0;

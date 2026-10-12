@@ -17,11 +17,11 @@ played through; later missions have had less testing. Please report problems in 
 
 - Any render resolution (720p to 4K and beyond, or a multiple of the window size), anti-aliasing
 - Widescreen 16:9 (the game's own widescreen mode) or 4:3, adjustable field of view
-- 30 fps (the original) or 60 fps (experimental)
+- 60 fps (the default) or the original 30 fps
 - Mouse look, with the weapon swaying as it does with the stick; keys bound to the game's actions; XInput
   controllers
 - Borderless fullscreen (F11), a menu bar for the port's settings, saved to `black.ini`
-- Room reverb, the game's own brightness and gamma ramp, an option to turn off auto-aim
+- Room reverb, the game's own brightness and gamma ramp; auto-aim off (Game menu); every movie can be skipped
 - Fixes for things the Xbox hides by its low resolution: flickering seams between pieces of destructible objects,
   a grid pattern in the blur effects
 
@@ -103,20 +103,24 @@ In menus the arrow keys move, Enter selects and Backspace goes back. Help > Cont
 ## Settings
 
 The window's menu bar holds the port's settings: render resolution, anti-aliasing, fullscreen, field of view, aspect
-ratio, frame rate, brightness, seam filling, reverb, key bindings, mouse sensitivity and inversion, auto-aim. Most apply at once; aspect ratio
+ratio, frame rate, brightness, seam filling, reverb, key bindings, mouse sensitivity and inversion, auto-aim, skipping movies. Most apply at once; aspect ratio
 and frame rate are read by the game when it starts, so a new choice is used from the next start. Choices are saved to
 `black.ini`.
 
 `black.exe --help` lists the command-line options. They override `black.ini` for that run, for example
-`--fullscreen`, `--resolution 1080`, `--fps 60`, `--fov 86`, `--normal-aspect`, `--no-autoaim`, `--mouse-sens 2.5`.
+`--fullscreen`, `--resolution 1080`, `--fps 30`, `--fov 86`, `--normal-aspect`, `--autoaim`, `--mouse-sens 2.5`.
 
 Field of view (Video > Field of view, `--fov`) is horizontal, in degrees; the game's is 70. The widescreen picture
 keeps that width and shows less height than 4:3; 86 shows the same height as the 4:3 picture. Aiming zooms by the
 same factor as before, cutscenes keep their own framing.
 
+The game lets you skip a movie only once you have earned it (the intro and a mission's movies after completing that
+mission, the logos never). The port lets A, START or Enter skip every movie; untick Game > Skip any movie (or start
+with `--no-movie-skip`) for the original rule.
+
 ## Known issues
 
-- 60 fps is experimental; 30 fps is the game's original rate and the default.
+- The game was made for 30 fps; at 60 (the default) something may still run at the wrong speed (Video > Frame rate).
 - The game's on-screen prompts show Xbox controller buttons, also when you play with the keyboard.
 - Audio: the reverb is an approximation of the Xbox's, some effect sends are not mixed, there is no subwoofer
   channel, and 3D sound uses distance and panning only.

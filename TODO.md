@@ -18,15 +18,15 @@ Open work on the BLACK PC port. Findings and addresses live in `NOTES.md`; this 
 - [x] Mouse look: rotates the view directly (user: "feels awesome").
 - [ ] Seams of destructible objects: vertex snap 1/8 Xbox pixel + seam fill pass (Video menu); user to confirm.
 - [ ] Weapon sway with mouse look (the gun swivels like with the stick): user to check the feel and amount.
-- [ ] Auto-aim switch (Game > Disable auto-aim, `--no-autoaim`; default on = original): confirm in play that the view
+- [ ] Auto-aim switch (Game > Disable auto-aim; default off since 2026-10-12, `--autoaim`): confirm in play that the view
       no longer drifts onto enemies with it ticked, and that nothing else changes.
 - [ ] Key bindings (keys bound to the game's actions, Input > Key bindings): play with them; Esc pauses and frees
       the mouse, resuming takes it again. The game's on-screen button prompts still show pad buttons.
 - [ ] Aspect ratio / frame rate in the menu: a notice, the choice saved for the next run, nothing changes until
       then (checked with a scripted run; black.ini writing is skipped in --background, confirm in play).
-- [ ] 60 fps (`--fps 60`, not the default): world step 1/60 s, audio fine, weapon refire and reload blur now match
+- [ ] 60 fps (the default since 2026-10-12, `--fps 30` = original): world step 1/60 s, audio fine, weapon refire and reload blur now match
       30 fps (measured). Check the rest in play: other weapons/fire modes, animations, AI, effects, scripted scenes;
-      decide whether 60 becomes the default.
+      60 became the default (user).
 - [ ] 60 fps slowdowns in busy scenes (user; also on PS2): the port's CPU overhead on the one game thread is the limit
       (perf recorder, NOTES.md). Round 1 done (texture checks once per frame, faster vertex conversion, shader key reuse,
       XInput): test scene 10.8 -> 5.1 ms; busy scene 78% -> 99.5% game speed. Round 2: stable textures checked every 16th frame.
@@ -35,6 +35,8 @@ Open work on the BLACK PC port. Findings and addresses live in `NOTES.md`; this 
       the last core with its sibling idle. Laptop crash at the first level (256-byte immediate-mode vertices on Intel) fixed;
       user played the first level through on the laptop. Re-record there at 30 and 60 fps to see what the changes gave. Next: VS constants only when changed (broke the
       picture, see NOTES), cache converted vertices in host buffers, log writes off the render thread, game CPU other than CPU 0.
+- [ ] Skip any movie (default; Game menu, `--no-movie-skip`): mission movies later in the game, end-of-mission movies,
+      credits.
 - [ ] Field of view (Video > Field of view, `--fov`): feel in play, aiming and scopes (aimed FOV = setting / zoom),
       cutscene transitions back to the player's view.
 - [ ] Reverb (bin 11 send into an FDN reverb): level and character against the Xbox (`--reverb-gain`).

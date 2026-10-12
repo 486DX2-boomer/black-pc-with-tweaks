@@ -82,6 +82,7 @@ HMENU build()
     HMENU bar = CreateMenu();
     HMENU game = popup(bar, L"&Game");
     item(game, ID_NO_AUTOAIM, L"Disable &auto-aim");
+    item(game, ID_SKIP_MOVIES, L"&Skip any movie (A / START / Enter)");
     sep(game);
     item(game, ID_EXIT, L"E&xit\tAlt+F4");
 
@@ -189,6 +190,7 @@ void update(HMENU bar, bool fullscreen)
     for (UINT id = ID_SENS_1; id <= ID_SENS_4; id++) check(bar, id, id == s);
     check(bar, ID_INVERT, g_cfg.mouse_invert);
     check(bar, ID_NO_AUTOAIM, !g_cfg.autoaim);
+    check(bar, ID_SKIP_MOVIES, g_cfg.skip_movies);
     for (UINT i = 0; i <= ID_FOV_LAST - ID_FOV_FIRST; i++) check(bar, ID_FOV_FIRST + i, close_to(g_cfg.fov, kFovs[i]));
     check(bar, ID_PERF_RECORD, perf::recording());
 }
@@ -240,6 +242,7 @@ void command(HWND hwnd, UINT id)
     case ID_SENS_DOWN: g_cfg.mouse_sens = std::max(0.1f, g_cfg.mouse_sens / 1.1f); break;
     case ID_INVERT: g_cfg.mouse_invert = !g_cfg.mouse_invert; break;
     case ID_NO_AUTOAIM: autoaim_set(!g_cfg.autoaim); break;
+    case ID_SKIP_MOVIES: g_cfg.skip_movies = !g_cfg.skip_movies; break;
     case ID_PERF_RECORD: perf::toggle(); return;
     case ID_PERF_FOLDER: {
         CreateDirectoryW(L"perf", nullptr);
