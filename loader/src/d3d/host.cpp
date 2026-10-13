@@ -372,6 +372,8 @@ void mouse_take(int *dx, int *dy, int *wheel)
     *wheel = g_wheel.exchange(0);
 }
 
+D3DPRESENT_PARAMETERS g_pp; // as created; Reset uses the same
+
 bool create_device()
 {
     g_d3d = Direct3DCreate9(D3D_SDK_VERSION);
@@ -397,6 +399,7 @@ bool create_device()
     pp.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE;
     // FPU_PRESERVE: the game's x87 math must keep its precision; MULTITHREADED: loader threads may call in.
     DWORD flags = D3DCREATE_HARDWARE_VERTEXPROCESSING | D3DCREATE_FPU_PRESERVE | D3DCREATE_MULTITHREADED;
+    g_pp = pp;
     HRESULT hr = g_d3d->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, g_hwnd, flags, &pp, &g_dev);
     if (FAILED(hr)) {
         logf("host: CreateDevice failed 0x%08lx, retrying with software vertex processing", hr);
@@ -435,14 +438,23 @@ void end_scene()
     }
 }
 
-void present()
+HRESULT present()
 {
-    if (!g_dev) return;
+    if (!g_dev) return D3D_OK;
     begin_scene();
     g_dev->EndScene();
     g_in_scene = false;
     RECT src = {0, 0, g_frame_w ? g_frame_w : g_bb_w, g_frame_h ? g_frame_h : g_bb_h};
-    g_dev->Present(&src, nullptr, nullptr, nullptr); // stretched to the client area (1:1 unless it outgrew the monitors)
+    return g_dev->Present(&src, nullptr, nullptr, nullptr); // stretched to the client area (1:1 unless it outgrew the monitors)
+}
+
+bool reset_device()
+{
+    end_scene();
+    D3DPRESENT_PARAMETERS pp = g_pp;
+    HRESULT hr = g_dev->Reset(&pp);
+    if (FAILED(hr)) logf("host: Reset failed 0x%08lx", hr);
+    return SUCCEEDED(hr);
 }
 
 } // namespace host3d

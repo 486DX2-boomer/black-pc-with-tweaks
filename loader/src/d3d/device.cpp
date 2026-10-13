@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <map>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -1137,16 +1138,14 @@ void capture_frame()
     }
 }
 
-// Change the render size while running (between frames). Every host target was made at the old scale: the
-// colour targets, depth buffers, depth views, snapshot copies and anti-aliasing intermediates are dropped and
-// come back on demand at the new size (their contents for one frame are lost; the game redraws them every
-// frame), then the game's current target and depth buffer are bound again with the viewport and scissor.
-// Textures still bound for sampling stay alive in Direct3D until the next draw replaces them.
-void change_render_scale(int pic_w, int pic_h)
+// Every host target (all of them in D3DPOOL_DEFAULT): the colour targets, depth buffers, depth views, snapshot
+// copies and anti-aliasing intermediates are dropped and come back on demand (their contents for one frame are
+// lost; the game redraws them every frame). Textures still bound for sampling stay alive in Direct3D until the
+// next draw replaces them.
+namespace {
+
+void release_host_targets()
 {
-    float ox = g_scale_x, oy = g_scale_y;
-    setup_render_scale(pic_w, pic_h);
-    if (fabsf(ox - g_scale_x) < 1e-4f && fabsf(oy - g_scale_y) < 1e-4f && !g_force_rebuild.exchange(false)) return;
     host3d::end_scene();
     IDirect3DDevice9 *d = host3d::dev();
     d->SetRenderTarget(0, g_host_backbuffer);
@@ -1173,14 +1172,93 @@ void change_render_scale(int pic_w, int pic_h)
             t = nullptr;
         }
     g_cur_rt = nullptr;
+}
+
+// The game's current target and depth buffer bound again, with the viewport and scissor.
+void rebind_game_target()
+{
     bind_render_target(g_st.render_target ? g_st.render_target : g_backbuffer, g_st.depth_stencil);
     apply_viewport();
     if (g_scissor_on) {
         RECT r = host_rect(g_scissor.x1, g_scissor.y1, g_scissor.x2, g_scissor.y2);
-        d->SetScissorRect(&r);
+        host3d::dev()->SetScissorRect(&r);
+        host3d::dev()->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
     }
+}
+
+} // namespace
+
+// Change the render size while running (between frames). Every host target was made at the old scale.
+void change_render_scale(int pic_w, int pic_h)
+{
+    float ox = g_scale_x, oy = g_scale_y;
+    setup_render_scale(pic_w, pic_h);
+    if (fabsf(ox - g_scale_x) < 1e-4f && fabsf(oy - g_scale_y) < 1e-4f && !g_force_rebuild.exchange(false)) return;
+    release_host_targets();
+    rebind_game_target();
     logf("[d3d] render size changed to %ux%u (x%.4g by x%.4g)", host_w(g_width), host_h(g_height), g_scale_x, g_scale_y);
 }
+
+namespace {
+
+// What the game set that goes to the device as it is and is not sent again at every draw (a Reset clears it).
+const D3DTRANSFORMSTATETYPE kTransforms[10] = {D3DTS_VIEW,     D3DTS_PROJECTION,     D3DTS_TEXTURE0,       D3DTS_TEXTURE1,
+                                               D3DTS_TEXTURE2, D3DTS_TEXTURE3,       D3DTS_WORLDMATRIX(0), D3DTS_WORLDMATRIX(1),
+                                               D3DTS_WORLDMATRIX(2), D3DTS_WORLDMATRIX(3)};
+D3DMATERIAL9 g_material;
+bool g_material_set;
+std::map<uint32_t, D3DLIGHT9> g_lights;
+std::map<uint32_t, BOOL> g_lights_on;
+
+// A Direct3D 9 device is lost when Windows takes the display from it: sleep and wake, the lock screen,
+// Ctrl+Alt+Del, a UAC prompt. Present then fails and everything drawn is thrown away, so the picture stopped at the
+// last frame (the game went on running). Once TestCooperativeLevel says the device can be reset, the host targets
+// and the back buffer references are released, the device is Reset, and what the game set is sent again: the draws
+// forget the states they sent, and the transforms, material, lights, target, viewport and scissor are set here.
+// Game textures (D3DPOOL_MANAGED), shaders and vertex declarations survive a Reset.
+bool g_device_lost;
+ULONGLONG g_lost_since;
+std::atomic<bool> g_reset_requested; // tests: press-file "reset" (the same path as a lost device)
+
+void recover_device(bool force)
+{
+    IDirect3DDevice9 *d = host3d::dev();
+    HRESULT hr = d->TestCooperativeLevel();
+    if (hr == D3D_OK && force) {
+        hr = D3DERR_DEVICENOTRESET;
+        logf("[d3d] tests: resetting the device as if it had been lost");
+    }
+    if (hr == D3D_OK) {
+        g_device_lost = false;
+        return;
+    }
+    if (!g_device_lost) {
+        g_device_lost = true;
+        g_lost_since = GetTickCount64();
+        logf("[d3d] the Direct3D device is lost (0x%08lx: sleep, lock screen...); drawing resumes when it can be reset", hr);
+    }
+    if (hr != D3DERR_DEVICENOTRESET) return; // still lost (D3DERR_DEVICELOST): ask again next frame
+    release_host_targets();
+    d->SetRenderTarget(0, g_host_backbuffer);
+    d->SetDepthStencilSurface(g_host_depth);
+    if (g_host_backbuffer) g_host_backbuffer->Release();
+    if (g_host_depth) g_host_depth->Release();
+    g_host_backbuffer = g_host_depth = nullptr;
+    bool ok = host3d::reset_device();
+    d->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &g_host_backbuffer);
+    d->GetDepthStencilSurface(&g_host_depth);
+    if (!ok) return; // the next frame tries again
+    forget_sent_state();
+    for (int i = 0; i < 10; i++) d->SetTransform(kTransforms[i], &g_st.transforms[i]);
+    if (g_material_set) d->SetMaterial(&g_material);
+    for (auto &kv : g_lights) d->SetLight(kv.first, &kv.second);
+    for (auto &kv : g_lights_on) d->LightEnable(kv.first, kv.second);
+    rebind_game_target();
+    g_device_lost = false;
+    logf("[d3d] the Direct3D device was reset; drawing again after %.1f s", (GetTickCount64() - g_lost_since) / 1000.0);
+}
+
+} // namespace
 
 void request_render_change() { g_render_request = true; }
 void request_render_rebuild()
@@ -1284,7 +1362,8 @@ uint32_t __stdcall D3DDevice_Swap(uint32_t Flags)
         snprintf(tag, sizeof tag, "frame_%05u", frames);
         screenshot_now(tag);
     }
-    host3d::present();
+    bool force = g_reset_requested.exchange(false);
+    if (host3d::present() == D3DERR_DEVICELOST || g_device_lost || force) recover_device(force);
     check_render_size();
     perf::frame_end(host_w(g_width), host_h(g_height));
     dev_field<uint32_t>(DEV_SWAPCOUNT)++;
@@ -1350,10 +1429,7 @@ void __stdcall D3DDevice_SetTransform(uint32_t State, const D3DMATRIX *pMatrix)
     if (State >= 10) return;
     g_st.transforms[State] = *pMatrix;
     memcpy(g_dev + DEV_TRANSFORMS + State * 0x40, pMatrix, 0x40);
-    static const D3DTRANSFORMSTATETYPE map[10] = {
-        D3DTS_VIEW, D3DTS_PROJECTION, D3DTS_TEXTURE0, D3DTS_TEXTURE1, D3DTS_TEXTURE2, D3DTS_TEXTURE3,
-        D3DTS_WORLDMATRIX(0), D3DTS_WORLDMATRIX(1), D3DTS_WORLDMATRIX(2), D3DTS_WORLDMATRIX(3)};
-    host3d::dev()->SetTransform(map[State], pMatrix);
+    host3d::dev()->SetTransform(kTransforms[State], pMatrix);
 }
 
 void __stdcall D3DDevice_SetViewport(const Viewport *pViewport)
@@ -1453,18 +1529,22 @@ uint32_t *__stdcall D3D_WriteViewportTransform(uint32_t *pPush)
 void __stdcall D3DDevice_SetMaterial(const D3DMATERIAL9 *pMaterial)
 {
     DTRACE("%p", pMaterial);
+    g_material = *pMaterial;
+    g_material_set = true;
     host3d::dev()->SetMaterial(pMaterial);
 }
 
 void __stdcall D3DDevice_SetLight(uint32_t Index, const D3DLIGHT9 *pLight)
 {
     DTRACE("%u, %p", Index, pLight);
+    g_lights[Index] = *pLight;
     host3d::dev()->SetLight(Index, pLight);
 }
 
 void __stdcall D3DDevice_LightEnable(uint32_t Index, BOOL bEnable)
 {
     DTRACE("%u, %d", Index, bEnable);
+    g_lights_on[Index] = bEnable;
     host3d::dev()->LightEnable(Index, bEnable);
 }
 
@@ -1743,6 +1823,8 @@ const Hle *hle_device_table(size_t *count)
     *count = sizeof kTable / sizeof kTable[0];
     return kTable;
 }
+
+void request_device_reset() { g_reset_requested = true; }
 
 void request_screenshot(const char *tag)
 {

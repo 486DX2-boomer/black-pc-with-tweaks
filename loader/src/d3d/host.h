@@ -30,7 +30,10 @@ constexpr D3DFORMAT FMT_INTZ = (D3DFORMAT)MAKEFOURCC('I', 'N', 'T', 'Z');
 bool intz();
 void begin_scene();                         // BeginScene once per frame, lazily
 void end_scene();                           // close the scene (before StretchRect); the next draw reopens one
-void present();                             // EndScene + Present
+HRESULT present();                          // EndScene + Present (D3DERR_DEVICELOST: see xd3d recover_device)
+// Reset with the creation parameters: every D3DPOOL_DEFAULT resource and reference to the back buffer and depth
+// surface must be released first; afterwards Direct3D is back at its default states.
+bool reset_device();
 bool window_closed();
 
 } // namespace host3d

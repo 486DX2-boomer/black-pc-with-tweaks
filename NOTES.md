@@ -191,6 +191,28 @@ Decomp target is functionally equivalent C++, not byte-matching (the XDK compile
   - In-game (PseMenu/InGameOn) pages import Core/PAudio, not Common/FEAudio, and have BkValueList instead of
     BkListBox, so they need their own template.
 
+### Sleep and wake, lock screen (fixed 2026-10-13)
+
+User report: the game froze when the PC went to sleep. Three things broke, all fixed:
+- **Direct3D 9 device lost** (sleep, lock screen, Ctrl+Alt+Del, UAC): Present returns D3DERR_DEVICELOST and every
+  draw is dropped, so the picture stayed on the last frame. `xd3d::recover_device` (d3d/device.cpp, after each
+  Present): once TestCooperativeLevel gives D3DERR_DEVICENOTRESET, the host targets (all D3DPOOL_DEFAULT: the same
+  set a render-size change drops) and the back buffer / depth references are released, `host3d::reset_device`
+  Resets with the creation parameters, and what the game set is sent again: `forget_sent_state` (draw.cpp: render,
+  texture-stage, texture, shader, declaration and fog-table caches), transforms (g_st), material and lights (now
+  kept), target, viewport, scissor. Game textures are D3DPOOL_MANAGED and survive, as do shaders and declarations.
+- **XAudio2 device gone** (HDMI / USB audio after wake, another default device): OnCriticalError, the source voice
+  takes no more buffers, `blocks_wanted` returned 0 for ever and the game's DirectSound buffers stopped. Now
+  audio/output.cpp closes and reopens XAudio2 (once a second) on the critical error or when no block was taken for a
+  second, and asks for blocks by the clock meanwhile (also without XAudio2 at all; more than a second behind is
+  skipped, not mixed in a burst).
+- **Game clock**: the emulated 733 MHz counter (timing.cpp) followed QPC, so after a sleep the game saw one frame as
+  long as the sleep. It now advances by the host time between two readings, at most a second (logged above 2 s).
+- Tests: press-file lines "reset" (the same Reset path, forced) and "audio-lost"; drive.py `freeze SECONDS`
+  suspends the whole process (NtSuspendProcess) like a sleep. Menu and mission pictures identical after resets; after
+  a 6 s freeze: clock capped, XAudio2 reopened in 40 ms, 60 fps on. A real device loss (TestCooperativeLevel
+  waiting on D3DERR_DEVICELOST) was not produced in a test.
+
 ### PC SETTINGS in the game's menus: state at the end of 2026-10-12 (loader `src/fe/`, not committed yet)
 
 - Built at every start from the user's own files into `cache\menus` (beside black.ini). The file layer serves it

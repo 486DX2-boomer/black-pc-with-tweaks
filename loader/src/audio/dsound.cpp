@@ -450,27 +450,15 @@ void __stdcall worker(void *)
         GetProcessAffinityMask(GetCurrentProcess(), &proc, &sys);
         if (g_game_cpu && (proc & ~g_game_cpu)) SetThreadAffinityMask(GetCurrentThread(), proc & ~g_game_cpu);
     }
-    bool host = audio_out::open();
-    LARGE_INTEGER f, start, now;
-    QueryPerformanceFrequency(&f);
-    QueryPerformanceCounter(&start);
-    uint64_t mixed = 0; // blocks, for the timer fallback
+    audio_out::open(); // without a device the output asks for blocks by the clock
     std::vector<Completion> done;
     static float block[audio_out::BLOCK * 2];
     for (;;) {
         Sleep(2);
-        uint32_t want;
-        if (host) {
-            want = audio_out::blocks_wanted();
-        } else {
-            QueryPerformanceCounter(&now);
-            uint64_t due = (uint64_t)(now.QuadPart - start.QuadPart) * audio_out::RATE / audio_out::BLOCK / f.QuadPart;
-            want = due > mixed ? (uint32_t)std::min<uint64_t>(due - mixed, 10) : 0;
-            mixed += want;
-        }
+        uint32_t want = audio_out::blocks_wanted();
         while (want--) {
             mix_block(block, done);
-            if (host) audio_out::submit(block);
+            audio_out::submit(block);
             deliver(done);
         }
     }

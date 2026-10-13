@@ -2,6 +2,7 @@
 // Xbox port 0 is fed by every PC XInput controller, merged with keyboard and mouse while the game window has
 // focus: the mouse rotates the view directly (input/mouselook.cpp; a click in the window captures the mouse),
 // keys and mouse buttons are bound to the game's actions (input/bindings.cpp, PC SETTINGS > CONTROLS > KEY BINDINGS).
+#include "audio/output.h"
 #include "d3d/dispatch.h"
 #include "d3d/draw.h"
 #include "d3d/host.h"
@@ -118,7 +119,8 @@ void parse_presses()
 }
 
 // --press-file: a test driver appends lines while the game runs: a press as in --press without the time ("k:Enter",
-// "a", "lx+80*500"), or "shot:NAME" for a screenshot of the next whole frame. Presses read together are 250 ms apart.
+// "a", "lx+80*500"), "shot:NAME" for a screenshot of the next whole frame, "reset" (a Direct3D device Reset as after
+// sleep) or "audio-lost" (the XAudio2 device gone). Presses read together are 250 ms apart.
 void read_press_file(uint32_t now_ms)
 {
     static ULONGLONG next_check;
@@ -151,6 +153,14 @@ void read_press_file(uint32_t now_ms)
                 if (line.empty()) continue;
                 if (line.rfind("shot:", 0) == 0) {
                     xd3d::request_screenshot(line.substr(5).c_str());
+                    continue;
+                }
+                if (line == "reset") {
+                    xd3d::request_device_reset();
+                    continue;
+                }
+                if (line == "audio-lost") {
+                    audio_out::simulate_lost();
                     continue;
                 }
                 uint32_t hold = 150;

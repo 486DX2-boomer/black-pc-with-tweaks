@@ -15,6 +15,9 @@ namespace {
 
 constexpr uint64_t XBOX_TSC_HZ = 733333333;
 
+// The Xbox never sleeps with a game running, but the PC does: after a sleep (or a debugger break) the host counter
+// has moved on by the whole pause, and the game saw one frame that long. So the counter the game reads moves by the
+// host time between two readings, but by a second at most; the game reads it many times a frame.
 uint64_t xbox_tsc()
 {
     static LARGE_INTEGER freq = [] {
@@ -22,9 +25,22 @@ uint64_t xbox_tsc()
         QueryPerformanceFrequency(&f);
         return f;
     }();
+    static SRWLOCK lock = SRWLOCK_INIT;
+    static int64_t last_host, game; // host counts
     LARGE_INTEGER now;
     QueryPerformanceCounter(&now);
-    uint64_t t = (uint64_t)now.QuadPart, f = (uint64_t)freq.QuadPart;
+    AcquireSRWLockExclusive(&lock);
+    if (!last_host) game = last_host = now.QuadPart;
+    int64_t step = now.QuadPart - last_host;
+    if (step > 0) {
+        game += step < freq.QuadPart ? step : freq.QuadPart;
+        last_host = now.QuadPart;
+    }
+    uint64_t t = (uint64_t)game;
+    ReleaseSRWLockExclusive(&lock);
+    if (step > 2 * freq.QuadPart)
+        logf("timing: the clock jumped %.1f s (the PC slept?); the game sees 1 s", (double)step / freq.QuadPart);
+    uint64_t f = (uint64_t)freq.QuadPart;
     return t / f * XBOX_TSC_HZ + t % f * XBOX_TSC_HZ / f;
 }
 

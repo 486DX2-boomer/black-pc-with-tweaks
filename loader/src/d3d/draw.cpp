@@ -737,6 +737,7 @@ IDirect3DPixelShader9 *g_ps_sent = (IDirect3DPixelShader9 *)~0u;
 IDirect3DVertexShader9 *g_vs_sent = (IDirect3DVertexShader9 *)~0u;
 IDirect3DVertexDeclaration9 *g_decl_sent; // null after SetFVF
 DWORD g_fvf_sent = ~0u;                   // ~0 after SetVertexDeclaration
+DWORD g_fog_table_sent = ~0u;
 
 void set_ps(IDirect3DDevice9 *d, IDirect3DPixelShader9 *ps)
 {
@@ -772,6 +773,15 @@ void forget_sent_shaders()
     g_vs_sent = (IDirect3DVertexShader9 *)~0u;
     g_decl_sent = nullptr;
     g_fvf_sent = ~0u;
+}
+
+void forget_sent_state()
+{
+    forget_sent_shaders();
+    memset(g_rs_valid, 0, sizeof g_rs_valid);
+    memset(g_ts_valid, 0, sizeof g_ts_valid);
+    for (IDirect3DBaseTexture9 *&t : g_tex_sent) t = nullptr; // Reset unbinds every texture
+    g_fog_table_sent = ~0u;
 }
 
 namespace {
@@ -811,11 +821,10 @@ bool begin_draw(DrawCtx &ctx)
         return false;
     }
     // Vertex shaders compute the fog factor themselves (oFog -> table function): D3D9 vertex fog.
-    static DWORD fog_table_sent = ~0u;
     DWORD fog_table = ctx.path == Path::Prog ? D3DFOG_NONE : render_state()[XRS_FOGTABLEMODE];
-    if (fog_table != fog_table_sent) {
+    if (fog_table != g_fog_table_sent) {
         d->SetRenderState(D3DRS_FOGTABLEMODE, fog_table);
-        fog_table_sent = fog_table;
+        g_fog_table_sent = fog_table;
     }
     g_st.draws++;
     return true;
