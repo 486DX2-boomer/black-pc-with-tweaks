@@ -212,6 +212,14 @@ Decomp target is functionally equivalent C++, not byte-matching (the XDK compile
     player's: game object (*0x2D45F0) + 0x21060 = controller (*0x2D45E8 + 0x518 + i * 0x16C), its +8 = 1, the check
     off, *0x2F3BD4 (binding table pointer) = game object + 0x20174. Enter there does the same for port 0.
   - Movies: the FMVPlayer page reacts to the menu input; the port's forced skip takes Enter directly.
+  - Hints that stop the game (PRESS A TO CONTINUE; ids 12 health packs, 13, 23, 24 low health, 87 at 0x28AA80): the
+    HUD sets game object + 0x21098 = 3 (0x131C47) and the game closes the hint on A / START of the player's controller
+    channels ([controller + 0xC]: A pressed +0x35, previous +0x19, analog +0x84; START +0x31 / +0x15 / +0x74; checks
+    at 0x129637, 0x129A38, 0x129B10 -> FUN_0020DBC0), not through the menus' input. So Enter is the pad's A for a
+    press that starts while a hint stops the game or no menu reads its input (fe_menu_keys marks the frames the menus
+    read); a press a menu took stays the menu's while the next page comes up. Tests: press-file "hint:N" shows hint N
+    through the game's FUN_0012B3C0 (eax = N; the HUD *0x2D12E4 + 0xC and a 16-byte vector it keeps at +0x22B0);
+    hints 12 and 24 shown and closed with Enter.
   - Tested keyboard only from a copy of the user's save: logos, PRESS START, menus, level select, mission, pause menu,
     PC SETTINGS, Options, resume, quit; a held arrow repeats on a slider; KEY BINDINGS captures.
 

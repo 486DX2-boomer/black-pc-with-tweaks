@@ -12,8 +12,10 @@
 //
 // Menus, pauses and cutscenes (no player update, see in_play) take no bound keys and nothing goes through the pad:
 // arrows, Enter and Backspace are the menus' own inputs (up, down, left, right, select, back; held arrows repeat),
-// which fe/calls.cpp gives the menus directly; Esc there only lets go of the mouse. A key held across a switch between
-// play and menus is ignored until it is released (a press that starts play must not also act in it).
+// which fe/calls.cpp gives the menus directly; Esc there only lets go of the mouse. Outside the menus the game itself
+// waits for the pad's A or START (PRESS A TO CONTINUE after a hint, skipping): there Enter is A (see apply). A key
+// held across a switch between play and menus is ignored until it is released (a press that starts play must not
+// also act in it).
 #include "input/bindings.h"
 
 #include "common.h"
@@ -139,6 +141,16 @@ ULONGLONG g_repeat_at;
 std::atomic<int> g_menu_input;            // pressed at the last poll, until the menus take it
 std::atomic<uint32_t> g_menu_input_frame; // when
 bool g_menu_select;                       // Enter held (movies: skip)
+std::atomic<uint32_t> g_menus_read_frame; // the menus last read their input (menu_input_read)
+
+// A hint that stops the game (PRESS A TO CONTINUE: the HUD's hint code at 0x131C47 sets game object (*0x2D45F0) +
+// 0x21098 = 3 for the hint ids at 0x28AA80) is closed by the game on A or START of the player's controller (its channel
+// block: A pressed +0x35, START +0x31; checks at 0x129B10 and around), not through the menus' input.
+bool hint_stopped()
+{
+    uint32_t game = *(const uint32_t *)(uintptr_t)0x002D45F0;
+    return game && *(const int32_t *)(uintptr_t)(game + 0x21098) == 3;
+}
 
 bool raw_held(uint16_t k, bool focus, int mouse)
 {
@@ -297,6 +309,8 @@ int take_menu_input()
 
 bool menu_select_held() { return g_menu_select; }
 
+void menu_input_read() { g_menus_read_frame = g_frame_count.load(); }
+
 bool in_play()
 {
     uint32_t f = mouselook_play_frame();
@@ -372,6 +386,17 @@ void apply(uint16_t &buttons, uint8_t analog[8], int16_t &lx, int16_t &ly, int16
         g_menu_input = input;
     }
     g_menu_select = g_menu_down[4];
+    // Enter is A for the whole press when, as it went down, no menu was reading its input or a hint stopped the game
+    // (a press a menu took stays the menu's while the next page comes up and reads nothing yet).
+    static bool enter_was, enter_is_a;
+    static int told;
+    if (g_menu_select && !enter_was) {
+        bool menus_reading = g_frame_count - g_menus_read_frame <= 2, hint = hint_stopped();
+        enter_is_a = !menus_reading || hint;
+        if (enter_is_a && told++ < 20) logf("[input] Enter = A (%s)", hint ? "a hint stops the game" : "no menu reads the keys");
+    }
+    enter_was = g_menu_select;
+    if (g_menu_select && enter_is_a) p.analog[0] = 255; // A, where the game waits for it
     if (!play) menu_esc = held(VK_ESCAPE);
     // The pause key in play and Esc in menus also let go of the mouse; play starting or
     // resuming takes it again.

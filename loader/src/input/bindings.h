@@ -38,6 +38,7 @@ bool in_play(); // the player is being updated (not a menu, pause or cutscene)
 // 5 select (Enter), 6 back (Backspace); 0 none. The front end's input (fe/calls.cpp) takes it.
 int take_menu_input();
 bool menu_select_held(); // Enter held in a menu or movie (movies: skip)
+void menu_input_read();  // the menus read their input this frame (fe/calls.cpp); elsewhere Enter is the pad's A
 // Tests: --press "SECONDSs:k:Name" holds a key (black.ini spelling) for the next poll, without focus.
 void script_hold(const std::string &name);
 

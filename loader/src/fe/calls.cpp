@@ -180,6 +180,7 @@ extern "C" uint32_t g_fe_menu_input = kMenuInput;
 
 extern "C" void __cdecl fe_menu_keys(uint8_t *input)
 {
+    bindings::menu_input_read();
     int key = bindings::take_menu_input();
     if (!key || *(int32_t *)input != 0 || input[9]) return;
     uint32_t &check = *(uint32_t *)(input + 4);

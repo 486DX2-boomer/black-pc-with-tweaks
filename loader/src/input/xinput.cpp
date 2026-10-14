@@ -118,9 +118,33 @@ void parse_presses()
     if (!g_presses.empty()) logf("[input] %zu scripted presses", g_presses.size());
 }
 
+// Tests: show in-game hint N as the game does (FUN_0012B3C0: eax = N, arguments the HUD (*0x2D12E4 + 0xC) and a
+// 16-byte vector it keeps at +0x22B0; FUN_0012C110 is the game's own caller). Hints 12, 13, 23, 87 and 24 stop the game
+// until A (PRESS A TO CONTINUE).
+void show_hint(int id)
+{
+    uint32_t root = *(const uint32_t *)(uintptr_t)0x002D12E4;
+    uint32_t hud = root ? *(const uint32_t *)(uintptr_t)(root + 0xC) : 0;
+    if (!hud) {
+        logf("[input] tests: no HUD for hint %d", id);
+        return;
+    }
+    alignas(16) float vec[4];
+    memcpy(vec, (const void *)(uintptr_t)(hud + 0x22B0), sizeof vec);
+    float *v = vec;
+    uint32_t fn = 0x0012B3C0;
+    logf("[input] tests: showing hint %d", id);
+    __asm {
+        push v
+        push hud
+        mov eax, id
+        call fn
+    }
+}
+
 // --press-file: a test driver appends lines while the game runs: a press as in --press without the time ("k:Enter",
 // "a", "lx+80*500"), "shot:NAME" for a screenshot of the next whole frame, "reset" (a Direct3D device Reset as after
-// sleep) or "audio-lost" (the XAudio2 device gone). Presses read together are 250 ms apart.
+// sleep), "audio-lost" (the XAudio2 device gone) or "hint:N" (show_hint). Presses read together are 250 ms apart.
 void read_press_file(uint32_t now_ms)
 {
     static ULONGLONG next_check;
@@ -161,6 +185,10 @@ void read_press_file(uint32_t now_ms)
                 }
                 if (line == "audio-lost") {
                     audio_out::simulate_lost();
+                    continue;
+                }
+                if (line.rfind("hint:", 0) == 0) {
+                    show_hint(atoi(line.c_str() + 5));
                     continue;
                 }
                 uint32_t hold = 150;
