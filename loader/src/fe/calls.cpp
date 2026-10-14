@@ -11,6 +11,7 @@
 #include "fe/calls.h"
 
 #include "common.h"
+#include "d3d/host.h"
 #include "fe/bind_list.h"
 #include "fe/pause_ui.h"
 #include "fe/pc_settings.h"
@@ -86,6 +87,13 @@ void pc_row(const char *row, const char *id, const char *moved)
 }
 void pc_back(const char *, const char *, const char *) { pauseui::back(); }
 
+// QUIT on the main menu (fe/pages.cpp main_menu_quit): as closing the window (settings saved, the port exits)
+void pc_quit(const char *, const char *, const char *)
+{
+    logf("fe: QUIT on the main menu");
+    PostMessageW(host3d::window(), WM_CLOSE, 0, 0);
+}
+
 // a page found its menu gone and made it again (fe/pages.cpp emit_heal)
 void pc_healed(const char *, const char *, const char *) { logf("fe: a page's menu was gone; made again"); }
 
@@ -103,6 +111,7 @@ const Handler kHandlers[] = {
     {"PCRow", pc_row},
     {"PCBack", pc_back},
     {"PCHealed", pc_healed},
+    {"PCQuit", pc_quit},
 };
 
 } // namespace
@@ -180,7 +189,6 @@ extern "C" uint32_t g_fe_menu_input = kMenuInput;
 
 extern "C" void __cdecl fe_menu_keys(uint8_t *input)
 {
-    bindings::menu_input_read();
     int key = bindings::take_menu_input();
     if (!key || *(int32_t *)input != 0 || input[9]) return;
     uint32_t &check = *(uint32_t *)(input + 4);

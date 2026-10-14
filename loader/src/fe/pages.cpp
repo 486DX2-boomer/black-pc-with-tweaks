@@ -471,25 +471,34 @@ void page_script(Movie &mv, const PageScript &p)
 }
 
 // ---------------------------------------------------------------------------------------------------- main menu
-void options_row(Movie &mv)
+// A row added below the bottom row of a menu's TextAnim. The game's menus (Options, the main menu) place each row's
+// text (character 5 in sprite 6 in sprite 7 for the bottom one, at depth 1) transparent in frame 0 and reveal it at a
+// frame (a Move with a colour transform) with a flash bar. The copy: depth 2, dy lower, named `name`, revealed 3
+// frames after the bottom row with its own bar at new_bar_depth.
+void add_menu_row(Movie &mv, uint32_t textanim, const std::string &label, const std::string &name, float dy, int reveal,
+                  uint32_t bar_depth, uint32_t new_bar_depth)
 {
-    uint32_t textanim = mv.character(27);
-    int t = mv.add_character(mv.clone_text(mv.character(5), "PC SETTINGS", "PC SETTINGS"));
+    int t = mv.add_character(mv.clone_text(mv.character(5), label, label));
     int s6 = mv.add_character(mv.clone_sprite(mv.character(6), {{5, t}}));
     int s7 = mv.add_character(mv.clone_sprite(mv.character(7), {{6, s6}}));
-    Bytes row = body(mv, mv.find_place(textanim, 0, 1)); // the Profile row
+    Bytes row = body(mv, mv.find_place(textanim, 0, 1));
     wr(row, 8, 2);
     wr(row, 12, (uint32_t)s7);
-    wrf(row, 36, rdf(row, 36) + 25.9f);
-    wr(row, 52, mv.cstring("PCSettings_Text"));
+    wrf(row, 36, rdf(row, 36) + dy);
+    wr(row, 52, mv.cstring(name));
     mv.append_control(textanim, 0, mv.alloc(row.data(), 64));
-    Bytes show = body(mv, mv.find_place(textanim, 55, 1, 1));
+    Bytes show = body(mv, mv.find_place(textanim, reveal, 1, 1));
     wr(show, 8, 2);
-    mv.append_control(textanim, 58, mv.alloc(show.data(), 64));
-    Bytes bar = body(mv, mv.find_place(textanim, 55, 21));
-    wr(bar, 8, 22);
-    wrf(bar, 36, rdf(bar, 36) + 25.9f);
-    mv.append_control(textanim, 58, mv.alloc(bar.data(), 64));
+    mv.append_control(textanim, reveal + 3, mv.alloc(show.data(), 64));
+    Bytes bar = body(mv, mv.find_place(textanim, reveal, bar_depth));
+    wr(bar, 8, new_bar_depth);
+    wrf(bar, 36, rdf(bar, 36) + dy);
+    mv.append_control(textanim, reveal + 3, mv.alloc(bar.data(), 64));
+}
+
+void options_row(Movie &mv)
+{
+    add_menu_row(mv, mv.character(27), "PC SETTINGS", "PCSettings_Text", 25.9f, 55, 21, 22); // below the Profile row
 
     uint32_t script = mv.main_script();
     for (const char *f : {"PagePrepare", "PageRelease", "PageDestruct", "Update"}) mv.rename_function(script, f, std::string(f) + "0");
@@ -515,6 +524,43 @@ void options_row(Movie &mv)
     a.function2("PageDestruct", [](Asm &f) {
         call_function(f, "PageDestruct0");
         f.push(Value::S("pcButton")).delete2().pop();
+    });
+    mv.append_control(mv.main, 0, mv.do_action(a.finish()));
+}
+
+// The main menu (blacktitlemenu: CONTINUE MISSION / OPTIONS / OPERATOR PROFILE; blacktitlemenu2 with a new profile:
+// START MISSION / OPTIONS) gets QUIT at the bottom, in the up / down ring between the last and the first button; it
+// asks the port to close the game (PCQuit, like closing the window).
+void main_menu_quit(Movie &mv, int textanim, float dy, int reveal, uint32_t bar_depth, uint32_t new_bar_depth,
+                    const char *last, const char *first)
+{
+    add_menu_row(mv, mv.character(textanim), "QUIT", "Quit_Text", dy, reveal, bar_depth, new_bar_depth);
+    uint32_t script = mv.main_script();
+    for (const char *f : {"PagePrepare", "PageRelease", "PageDestruct", "Update"}) mv.rename_function(script, f, std::string(f) + "0");
+    Classes classes = own_classes_prepare(mv);
+    Asm a(mv);
+    own_classes_script(a, classes, "main");
+    heal_update(a, "quitButton", classes, "main");
+    a.push(Value::S("quitButton")).define_local2();
+    a.function2("PagePrepare", [last, first](Asm &f) {
+        call_function(f, "PagePrepare0");
+        make(f, "quitButton", "BkMenuButton", {at({"Main", "TextAnim", "Quit_Text"})});
+        set(f, {last}, "buttonDown", at({"quitButton"}));
+        set(f, {"quitButton"}, "buttonUp", at({last}));
+        set(f, {"quitButton"}, "buttonDown", at({first}));
+        set(f, {first}, "buttonUp", at({"quitButton"}));
+        set(f, {"quitButton"}, "actionSelectFunction", [](Asm &g) {
+            g.function2("", [](Asm &h) { trigger(h, "PCQuit", {}); });
+        });
+        f.push_true().ret();
+    });
+    a.function2("PageRelease", [](Asm &f) {
+        call_function(f, "PageRelease0");
+        call(f, {"quitButton"}, "Release");
+    });
+    a.function2("PageDestruct", [](Asm &f) {
+        call_function(f, "PageDestruct0");
+        f.push(Value::S("quitButton")).delete2().pop();
     });
     mv.append_control(mv.main, 0, mv.do_action(a.finish()));
 }
@@ -978,6 +1024,12 @@ bool fe_build_pages(const std::wstring &game_dir, const std::wstring &out_root)
         Movie opt(options);
         options_row(opt);
         c.movies["optionsmenuxbox"] = opt.build();
+        Movie title(movie(c, "blacktitlemenu")); // QUIT under OPERATOR PROFILE (rows 25.1 apart, revealed 43/46/49)
+        main_menu_quit(title, 18, 25.1f, 49, 11, 12, "profileButton", "continueButton");
+        c.movies["blacktitlemenu"] = title.build();
+        Movie fresh(movie(c, "blacktitlemenu2")); // QUIT under OPTIONS (revealed 43/46)
+        main_menu_quit(fresh, 14, 25.0f, 46, 7, 8, "optionsButton", "startButton");
+        c.movies["blacktitlemenu2"] = fresh.build();
     }, fe) && write_file(dir + L"FEMain.bin", fe);
     if (!main_ok) DeleteFileW((dir + L"FEMain.bin").c_str()); // not an old build of the pages
     // the pause menu: PC SETTINGS after OPTIONS (InGameOn.bin) opens the one PC SETTINGS pause page (a copy of the

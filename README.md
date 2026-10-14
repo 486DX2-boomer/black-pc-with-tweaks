@@ -96,7 +96,8 @@ again.
 | Pause | Esc |
 
 In menus the arrow keys move (held, they repeat), Enter selects and Backspace goes back; Enter also passes PRESS START,
-skips movies and closes the game's hints (PRESS A TO CONTINUE). On the KEY BINDINGS page left / right choose the first or second key and Enter waits for the new one
+skips movies and a mission's intro text, and closes the game's hints (PRESS A TO CONTINUE). QUIT at the bottom of the
+main menu closes the game. On the KEY BINDINGS page left / right choose the first or second key and Enter waits for the new one
 (Esc cancels, Delete clears it). Any key can be bound, F1-F12 included: the port has no keys of its own.
 
 ## Settings

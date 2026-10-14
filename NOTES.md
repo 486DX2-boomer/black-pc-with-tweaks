@@ -220,6 +220,14 @@ Decomp target is functionally equivalent C++, not byte-matching (the XDK compile
     read); a press a menu took stays the menu's while the next page comes up. Tests: press-file "hint:N" shows hint N
     through the game's FUN_0012B3C0 (eax = N; the HUD *0x2D12E4 + 0xC and a 16-byte vector it keeps at +0x22B0);
     hints 12 and 24 shown and closed with Enter.
+  - A mission's intro text (location and time typing out before play) is skipped by START of the player's controller
+    (not A). No menu page is up then: the front end's current page name (FE object *0x2D199C + 0x3840) is empty, though
+    its input code still runs. So Enter is START for a press that starts with no menu page (and A while a hint stops
+    the game; game object +0x21078..0x2109C do not change during the intro text).
+- **QUIT on the main menu** (`main_menu_quit`, fe/pages.cpp): blacktitlemenu (CONTINUE MISSION / OPTIONS / OPERATOR
+  PROFILE: TextAnim char 18, rows 25.1 apart, revealed at 43/46/49 with bars at depths 7/9/11) and blacktitlemenu2
+  (START MISSION / OPTIONS: TextAnim char 14, revealed at 43/46, bars 5/7) get a QUIT row (`add_menu_row`, shared with
+  Options' PC SETTINGS row) in the up / down ring; it calls PCQuit, which posts WM_CLOSE (settings saved, exit).
   - Tested keyboard only from a copy of the user's save: logos, PRESS START, menus, level select, mission, pause menu,
     PC SETTINGS, Options, resume, quit; a held arrow repeats on a slider; KEY BINDINGS captures.
 
