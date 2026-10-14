@@ -11,6 +11,7 @@
 #include "fe/vars.h"
 #include "fov.h"
 #include "input/autoaim.h"
+#include "reload_blur.h"
 #include "settings.h"
 
 #include <algorithm>
@@ -135,6 +136,8 @@ const Row kRows[] = {
      [](int i) { g_cfg.mouse_sens = 0.25f * (i + 1); }, [](int i) { return number(0.25f * (i + 1), L"%.2f"); }, true},
     {"INVERT MOUSE", 2, [] { return (int)g_cfg.mouse_invert; }, [](int i) { g_cfg.mouse_invert = i != 0; }, [](int i) { return on_off(i); }},
     {"KEY BINDINGS", 1, [] { return 0; }, [](int) {}, [](int) { return std::wstring(); }}, // opens the bindings page
+    // AUDIO AND GAME, added later (appended so the rows above keep their numbers)
+    {"RELOAD BLUR", 2, [] { return (int)g_cfg.reload_blur; }, [](int i) { reload_blur_set(i != 0); }, [](int i) { return on_off(i); }},
 };
 constexpr int kRowN = sizeof kRows / sizeof kRows[0];
 constexpr int kKeyBindings = 15;
@@ -146,7 +149,7 @@ const std::vector<Group> &groups()
     static const std::vector<Group> g = {
         {"PCVideo", "VIDEO", {0, 1, 2, 3, 4, 5}},
         {"PCDisplay", "DISPLAY", {6, 7, 8, 9}},
-        {"PCGame", "AUDIO AND GAME", {10, 11, 12}},
+        {"PCGame", "AUDIO AND GAME", {10, 11, 16, 12}},
         {"PCControls", "CONTROLS", {13, 14, kKeyBindings}},
     };
     return g;

@@ -15,6 +15,7 @@
 #include "input/autoaim.h"
 #include "input/mouselook.h"
 #include "kernel/ktable.h"
+#include "reload_blur.h"
 #include "kernel/xboxkrnl.h"
 #include "xbe.h"
 #include "xthread.h"
@@ -87,6 +88,7 @@ void usage()
            "  --mouse-sens K    mouse look sensitivity, K x 0.022 degrees per count (default 2.0)\n"
            "  --mouse-invert    mouse forward looks down\n"
            "  --autoaim         the game's auto-aim (the view pulling toward enemies), off by default; --no-autoaim\n"
+           "  --no-reload-blur  no screen blur while reloading (default: on, as the original); --reload-blur\n"
            "  --fov D           horizontal field of view in play, 50-120 degrees (default 70, the game's; PC SETTINGS > VIDEO)\n"
            "  --no-movie-skip   movies skip only as in the original (default: A / START skip every movie)\n"
            "  --no-pc-menus     no PC SETTINGS pages in the game's Options menu (built at start into cache\\menus\n"
@@ -201,6 +203,8 @@ bool parse_args()
         } else if (a == L"--mouse-invert") { g_cfg.mouse_invert = true; settings_mark_cli("mouse_invert"); }
         else if (a == L"--no-autoaim") { g_cfg.autoaim = false; settings_mark_cli("autoaim"); }
         else if (a == L"--autoaim") { g_cfg.autoaim = true; settings_mark_cli("autoaim"); }
+        else if (a == L"--no-reload-blur") { g_cfg.reload_blur = false; settings_mark_cli("reloadblur"); }
+        else if (a == L"--reload-blur") { g_cfg.reload_blur = true; settings_mark_cli("reloadblur"); }
         else if (a == L"--fov") {
             settings_mark_cli("fov");
             std::wstring v;
@@ -445,6 +449,7 @@ int run(void *reserve, unsigned reserve_size)
     if (known_build) install_timing_patches();
     if (known_build) install_mouselook_patches();
     if (known_build) install_autoaim_patch();
+    if (known_build) install_reload_blur_patch();
     if (known_build) install_fov_patch();
     if (known_build) install_fe_calls();
     if (known_build && g_cfg.pc_menus) { // the in-game PC SETTINGS pages, from the user's own front-end file
