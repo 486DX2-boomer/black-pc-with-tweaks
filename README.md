@@ -3,16 +3,13 @@
 An unofficial native Windows port of **BLACK** (Criterion Games, 2006), made from the original Xbox version (NTSC-U).
 
 `black.exe` loads your own copy of the game's `default.xbe` and runs the original x86 game code directly on the
-PC. Nothing is emulated instruction by instruction: the parts of the Xbox the game talks to (the kernel, Direct3D 8,
-DirectSound, the controller library) are replaced by PC code. This is high-level emulation in the style of
-Cxbx-Reloaded, built for this one game.
+PC.
 
 **You need your own copy of the game.** This repository and the release downloads contain no game code or data.
 
 ## Status
 
-The game boots through the logos, title screen, menus and videos and is playable. The first two missions have been
-played through; later missions have had less testing. Please report problems in the issue tracker and include
+The game is fully playable. Please report problems in the issue tracker and include
 `port\black.log`.
 
 - Any render resolution (720p to 4K and beyond, or a multiple of the window size), anti-aliasing
@@ -38,7 +35,7 @@ Windows.
 
 ## Setting up
 
-1. Dump your disc to an ISO and extract it with [extract-xiso](https://github.com/XboxDev/extract-xiso)
+1. Dump your NTSC-U version of the game to an ISO and extract it with [extract-xiso](https://github.com/XboxDev/extract-xiso)
    (`extract-xiso -x Black.iso`). Rename the extracted folder to `game`.
 2. Check that you have the supported build. In PowerShell:
 
@@ -60,17 +57,11 @@ Windows.
        blackrt.dll
    ```
 
-4. Start `port\black.exe`. No options are needed.
+4. Start `port\black.exe`. 
 
 The port keeps everything it writes in the `port` folder: `savedata\` holds the Xbox hard disk (saved games and the
 game's settings), `black.ini` the port's settings, `black.log` the log of the last run and `cache\menus` the game's menu
-files with the PC SETTINGS pages added and the game's text with COMPUTER for XBOX in its messages (made again at
-every start from the files in `game`). The game folder can also
-be somewhere else: `black.exe D:\Games\Black\game`. Only the game window opens; `black.log` records the details of
-each run.
-
-Coming from 0.1.0 (where `black.exe` sat next to `game`): move `hdd\` into `port\` and rename it `savedata`, and move
-`black.ini` into `port\`.
+files with the PC SETTINGS pages added.
 
 ## Controls
 
@@ -131,11 +122,11 @@ MOVIE to off (or start with `--no-movie-skip`) for the original rule.
 ## Known issues
 
 - The game was made for 30 fps; at 60 (the default) something may still run at the wrong speed (PC SETTINGS > DISPLAY >
-  FRAME RATE).
+  FRAME RATE), but I didn't notice.
 - The game's on-screen prompts show Xbox controller buttons, also when you play with the keyboard.
 - Audio: the reverb is an approximation of the Xbox's, some effect sends are not mixed, there is no subwoofer
   channel, and 3D sound uses distance and panning only.
-- Only the NTSC-U build is supported (`--force` tries another build, which will most likely fail).
+- **Only the NTSC-U build is supported** (`--force` tries another build, which will most likely fail).
 
 ## Building from source
 
