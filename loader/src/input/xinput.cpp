@@ -286,7 +286,7 @@ void read_pad(uint32_t port, XGamepad &g)
     int wheel = mouse_look(live, &raw_wheel);
     if (!bindings::capture_poll(focus, raw_wheel)) // while the key bindings page waits for a key, keys bind instead
         bindings::apply(g.wButtons, g.bAnalogButtons, g.sThumbLX, g.sThumbLY, g.sThumbRX, g.sThumbRY, focus, live, wheel);
-    movies_poll(g.wButtons, g.bAnalogButtons);
+    movies_poll(g.wButtons, g.bAnalogButtons, bindings::menu_select_held());
 }
 
 } // namespace

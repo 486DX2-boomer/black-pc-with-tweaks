@@ -191,6 +191,30 @@ Decomp target is functionally equivalent C++, not byte-matching (the XDK compile
   - In-game (PseMenu/InGameOn) pages import Core/PAudio, not Common/FEAudio, and have BkValueList instead of
     BkListBox, so they need their own template.
 
+### Release 0.2.0 layout, menu keys, no port keys (2026-10-14)
+
+- **Layout:** the zip holds one folder, `port\` (black.exe, blackrt.dll, README.md, LICENSE.txt), extracted next to
+  the user's `game\`. `g_cfg.port_dir` = black.exe's folder; defaults there: `savedata\` (the HDD, was `hdd\`),
+  `black.log`, `black.ini`, `cache\menus`, `perf\`. The game is still found by looking upwards from black.exe
+  (port -> the folder with game), which becomes the current folder (relative `--hdd` / `--log` given on the command
+  line resolve against it, so the dev shortcut `--hdd work\hdd --log work\play.log` is unchanged; its black.ini is now
+  `work\run\black.ini`). Tested from an extracted zip with a junction to game: all files under port\.
+- **No port keys:** F2 (perf; `--perf-at` stays), F3-F9, F10, F11, F12 removed; any key can be bound. The window title
+  is "BLACK" ("[AUTOMATED TEST, MUTED] BLACK" with --background).
+- **Menu keys without the pad:** in menus, pauses and cutscenes bound keys do nothing and arrows / Enter / Backspace no
+  longer press D-pad / A / B. FUN_00118B70 (once per front-end update) clears the menus' input id (FE object + 0x44C,
+  registered as externObject FEInputId by FUN_0011A820) and fills it with FUN_00118A80 (eax = controller, ebx = input
+  object: D-pad / stick up-down with repeat, left-right, A or START = 5, B or BACK = 6, START on "PauseMenu" = 6;
+  +9/+0xC a lock-out). Its two calls (0x118B9D, 0x118BC6) and the one in the PRESS START check FUN_0011A750 (0x11A79C)
+  go through `menu_input_thunk` (fe/calls.cpp): after the game's reading, `bindings::take_menu_input` sets the id
+  when no controller did (held arrows repeat after 400 ms every 120 ms).
+  - PRESS START (ListenForPlayer('0') sets the check +4 = FUN_0011A750): the first controller with A/START becomes the
+    player's: game object (*0x2D45F0) + 0x21060 = controller (*0x2D45E8 + 0x518 + i * 0x16C), its +8 = 1, the check
+    off, *0x2F3BD4 (binding table pointer) = game object + 0x20174. Enter there does the same for port 0.
+  - Movies: the FMVPlayer page reacts to the menu input; the port's forced skip takes Enter directly.
+  - Tested keyboard only from a copy of the user's save: logos, PRESS START, menus, level select, mission, pause menu,
+    PC SETTINGS, Options, resume, quit; a held arrow repeats on a slider; KEY BINDINGS captures.
+
 ### Sleep and wake, lock screen (fixed 2026-10-13)
 
 User report: the game froze when the PC went to sleep. Three things broke, all fixed:

@@ -14,7 +14,7 @@ Open work on the BLACK PC port. Findings and addresses live in `NOTES.md`; this 
 - [ ] Higher internal resolution (`--scale N`, default 3 = 2560x1440 widescreen, window fitted to the screen,
       DPI-aware): check that every effect still lines up (light shafts, reload blur, bloom, fades, video, menus) at 1-4.
 - [ ] Widescreen (default; the game's own 16:9 mode, `--normal-aspect` for 4:3): menus, HUD, videos, briefings.
-- [ ] Window resizing at a fixed aspect, F11 fullscreen, black bars when maximised.
+- [ ] Window resizing at a fixed aspect, fullscreen (PC SETTINGS), black bars when maximised.
 - [x] Mouse look: rotates the view directly (user: "feels awesome").
 - [ ] Seams of destructible objects: vertex snap 1/8 Xbox pixel + seam fill pass (PC SETTINGS > DISPLAY); user to confirm.
 - [ ] Weapon sway with mouse look (the gun swivels like with the stick): user to check the feel and amount.
@@ -47,7 +47,7 @@ Open work on the BLACK PC port. Findings and addresses live in `NOTES.md`; this 
 ## Next
 
 - [x] Custom render resolution: `--resolution WxH | H | native`, fractional `--scale` (any size, not just multiples).
-- [x] Render size changes while running: `native` follows the window (and F11), F10 cycles 1 / 1.5 / 2 x the window.
+- [x] Render size changes while running: `native` follows the window (and fullscreen); PC SETTINGS sets it.
 - [x] Faint grid in the game's blur at high render sizes: the small post-processing buffers keep their Xbox size.
       (Also checks: glow and light cones look as on the Xbox; nothing else renders into small targets.)
 - [ ] Resolution: better downsampling when the render size is much larger than the window (box filter instead of

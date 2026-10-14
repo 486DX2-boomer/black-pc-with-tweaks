@@ -13,15 +13,15 @@ Cxbx-Reloaded, built for this one game.
 
 The game boots through the logos, title screen, menus and videos and is playable. The first two missions have been
 played through; later missions have had less testing. Please report problems in the issue tracker and include
-`black.log`.
+`port\black.log`.
 
 - Any render resolution (720p to 4K and beyond, or a multiple of the window size), anti-aliasing
 - Widescreen 16:9 (the game's own widescreen mode) or 4:3, adjustable field of view
 - 60 fps (the default) or the original 30 fps
 - Mouse look, with the weapon swaying as it does with the stick; keys bound to the game's actions; XInput
   controllers
-- The port's settings in the game's own menus (Options > PC SETTINGS, and in the pause menu), saved to `black.ini`;
-  borderless fullscreen (F11)
+- The port's settings in the game's own menus (Options > PC SETTINGS, and in the pause menu), including borderless
+  fullscreen
 - Room reverb, the game's own brightness and gamma ramp; auto-aim off by default; every movie can be skipped
 - Fixes for things the Xbox hides by its low resolution: flickering seams between pieces of destructible objects,
   a grid pattern in the blur effects
@@ -47,37 +47,36 @@ Windows.
    ```
 
    It must print `DF2739C372D254A90AEECCF5971D12097F22D89FBB90DB021FDA96DD4DEB68F6`.
-3. Download the zip from [Releases](../../releases) and put `black.exe` and `blackrt.dll` next to the `game` folder:
+3. Download the zip from [Releases](../../releases) and extract it next to the `game` folder, so the `port` folder
+   sits beside it:
 
    ```
    BLACK\
-     black.exe
-     blackrt.dll
      game\
        default.xbe
        ...
+     port\
+       black.exe
+       blackrt.dll
    ```
 
-4. Start `black.exe`.
+4. Start `port\black.exe`. No options are needed.
 
-The port keeps its files in that folder: `hdd\` holds the Xbox hard disk (saved games and settings), `black.ini` the
-port's settings, `black.log` the log of the last run and `cache\menus` the game's menu files with the PC SETTINGS
-pages added (made again at every start from the files in `game`). The game folder can also be somewhere else:
-`black.exe D:\Games\Black\game` (the port's own files then go into the current folder). Only the game window opens;
-`black.log` records the details of each run.
+The port keeps everything it writes in the `port` folder: `savedata\` holds the Xbox hard disk (saved games and the
+game's settings), `black.ini` the port's settings, `black.log` the log of the last run and `cache\menus` the game's menu
+files with the PC SETTINGS pages added (made again at every start from the files in `game`). The game folder can also
+be somewhere else: `black.exe D:\Games\Black\game`. Only the game window opens; `black.log` records the details of
+each run.
 
-### Linux (Wine)
-
-Not tested yet. Put `black.sh` (in the zip) next to `black.exe` and run `sh black.sh`, or `chmod +x black.sh` once and
-then `./black.sh`. It needs Wine with 32-bit support and keeps its Wine prefix in `wineprefix/` beside it; arguments
-are passed to `black.exe`, Linux paths converted (`./black.sh /mnt/games/Black/game`). The comments at the top of
-`black.sh` list the options and what to try if the picture is wrong.
+Coming from 0.1.0 (where `black.exe` sat next to `game`): move `hdd\` into `port\` and rename it `savedata`, and move
+`black.ini` into `port\`.
 
 ## Controls
 
 Keys and mouse buttons are bound to the game's own actions, not to controller buttons, and can be changed in
-PC SETTINGS > CONTROLS > KEY BINDINGS (two keys per action, saved to `black.ini`). Controllers work as well. Click the window to
-capture the mouse; Esc lets go of it (in play it also pauses), and play starting or resuming takes it again.
+PC SETTINGS > CONTROLS > KEY BINDINGS (two keys per action, saved to `black.ini`). Controllers work as well. Click
+the window to capture the mouse; Esc lets go of it (in play it also pauses), and play starting or resuming takes it
+again.
 
 | Action | Default |
 |---|---|
@@ -96,19 +95,9 @@ capture the mouse; Esc lets go of it (in play it also pauses), and play starting
 | Show objectives | Space |
 | Pause | Esc |
 
-In menus the arrow keys move, Enter selects and Backspace goes back. On the KEY BINDINGS page left / right choose the
-first or second key and Enter waits for the new one (Esc cancels, Delete clears it).
-
-| Key | Port function |
-|---|---|
-| F11 | fullscreen on / off |
-| F3 / F4 | mouse sensitivity |
-| F5 / F6 | output gain (brightness) |
-| F7 / F8 | gamma |
-| F9 | anti-aliasing |
-| F10 | render size 1 / 1.5 / 2 x the window |
-| F2 | start / stop a performance recording (`perf\`) |
-| F12 | dump the next frame for bug reports (`work\dumps\`) |
+In menus the arrow keys move (held, they repeat), Enter selects and Backspace goes back; Enter also passes PRESS START
+and skips movies. On the KEY BINDINGS page left / right choose the first or second key and Enter waits for the new one
+(Esc cancels, Delete clears it). Any key can be bound, F1-F12 included: the port has no keys of its own.
 
 ## Settings
 

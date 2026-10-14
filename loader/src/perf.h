@@ -1,8 +1,8 @@
-// Performance recorder (F2; --perf-at for scripted runs).
+// Performance recorder (--perf-at).
 //
 // While recording: per-frame timings and counters on the game's render thread (the thread that calls
 // D3DDevice_Swap), a sampling profiler of that thread (~1 kHz, from a thread off the game CPU) and the CPU
-// time of every thread. Stopping writes perf\<date_time>\ next to black.ini: summary.txt (where the frame
+// time of every thread. Stopping writes perf\<date_time>\ next to black.exe: summary.txt (where the frame
 // time goes, what grows in slow frames, hot functions), frames.csv and threads.csv.
 #pragma once
 
@@ -24,7 +24,6 @@ extern volatile bool g_on; // recording (cheap test for the hot paths)
 
 void toggle();             // start or stop (any thread; applied by the render thread at the next frame)
 bool recording();
-void title_tag(char *out, unsigned size); // "REC 12 s - F2 stops" / "saved perf\..." / ""
 
 // Render thread, from D3DDevice_Swap.
 void swap_begin();                              // the frame's work is done

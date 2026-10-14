@@ -54,8 +54,8 @@ void usage()
            "BLACK PC port " BLACK_VERSION "\n"
            "usage: black.exe [options] [path\\to\\default.xbe | game folder]\n"
            "  --info            print the XBE structure and exit\n"
-           "  --hdd <dir>       host folder for the Xbox hard disk partitions (default .\\hdd)\n"
-           "  --log <file>      log file (default .\\black.log)\n"
+           "  --hdd <dir>       host folder for the Xbox hard disk (saved games; default savedata next to black.exe)\n"
+           "  --log <file>      log file (default black.log next to black.exe)\n"
            "  --symbols <csv>   functions.csv for names in logs (default notes\\functions.csv if present)\n"
            "  --trace           log every kernel call, not only the first of each kind\n"
            "  --trace-d3d       log every D3D call\n"
@@ -77,24 +77,25 @@ void usage()
            "                    or native (the window's size at start, the screen's with --fullscreen)\n"
            "  --window WxH      window client size (default: largest size of the game's aspect that fits the screen)\n"
            "  --normal-aspect   4:3 like an original Xbox on a standard TV (default: widescreen 16:9)\n"
-           "  --fullscreen      start in borderless fullscreen (F11 toggles)\n"
+           "  --fullscreen      start in borderless fullscreen\n"
            "  --fps 30|60       frame rate (default 60; 30 is the original)\n"
            "  --no-reverb       do not mix the room reverb\n"
            "  --reverb-gain K   room reverb level (default 1.0)\n"
            "  --background      (tests) start minimised without focus, audio muted\n"
            "  --wav <file>      record the audio output as a WAV file\n"
            "  --rawvideo <file> record the picture as raw BGRX frames from --shot-start for --clip-seconds (default 4)\n"
-           "  --mouse-sens K    mouse look sensitivity, K x 0.022 degrees per count (default 2.0; F3/F4 adjust live)\n"
+           "  --mouse-sens K    mouse look sensitivity, K x 0.022 degrees per count (default 2.0)\n"
            "  --mouse-invert    mouse forward looks down\n"
            "  --autoaim         the game's auto-aim (the view pulling toward enemies), off by default; --no-autoaim\n"
            "  --fov D           horizontal field of view in play, 50-120 degrees (default 70, the game's; PC SETTINGS > VIDEO)\n"
            "  --no-movie-skip   movies skip only as in the original (default: A / START skip every movie)\n"
-           "  --no-pc-menus     no PC SETTINGS pages in the game's Options menu (built at start into cache\\menus)\n"
+           "  --no-pc-menus     no PC SETTINGS pages in the game's Options menu (built at start into cache\\menus\n"
+           "                    next to black.exe)\n"
            "  --gain K          output gain after the game's gamma ramp (default 1.0; F5/F6 adjust live)\n"
            "  --no-ramp         ignore the game's gamma ramp (no fades, half brightness: the raw framebuffer)\n"
            "  --no-aa           no anti-aliasing (default: edge-directed post filter; F9 toggles)\n"
            "  --no-seamfill     do not fill hairline cracks between geometry pieces (destructible walls)\n"
-           "  --perf-at S:D     record performance (like F2) for D seconds from S seconds after the first frame\n"
+           "  --perf-at S:D     record performance for D seconds from S seconds after the first frame (perf\\)\n"
            "  --timer-vblank    vblank from a 59.94 Hz timer instead of the display's refresh (default: follow a ~60 Hz display)\n"
            "  --force           run an XBE other than the known NTSC-U build\n"
            "  --verbose         print the whole log on the console too (default: startup, errors, exit; all in the log file)\n";
@@ -277,14 +278,17 @@ bool parse_args()
     }
     LocalFree(argv);
     if (target.empty()) target = L"game\\default.xbe";
+    // The port keeps its own files beside black.exe (the release's port folder, next to game).
+    wchar_t exe[MAX_PATH];
+    DWORD n = GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    std::wstring exe_path(exe, n);
+    g_cfg.port_dir = exe_path.substr(0, exe_path.find_last_of(L"\\/"));
     // Started from a shortcut or another folder: if a relative game path is not found here, look for it
-    // from black.exe's own folder upwards (work\run -> work -> project root) and make that folder current,
-    // so the other relative paths (--hdd, --log, notes\) resolve against it too.
+    // from black.exe's own folder upwards (port -> the folder with game; work\run -> work -> project root) and make
+    // that folder current, so relative paths given on the command line (--hdd, --log) and notes\ resolve against it.
     bool relative = !(target.size() >= 2 && (target[1] == L':' || (target[0] == L'\\' && target[1] == L'\\')));
     if (relative && GetFileAttributesW(target.c_str()) == INVALID_FILE_ATTRIBUTES) {
-        wchar_t exe[MAX_PATH];
-        DWORD n = GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        std::wstring dir(exe, n);
+        std::wstring dir = exe_path;
         for (int up = 0; up < 4; up++) {
             size_t cut = dir.find_last_of(L"\\/");
             if (cut == std::wstring::npos) break;
@@ -300,9 +304,9 @@ bool parse_args()
     g_cfg.xbe_path = target;
     size_t slash = target.find_last_of(L"\\/");
     g_cfg.game_dir = slash == std::wstring::npos ? L"." : target.substr(0, slash);
-    if (g_cfg.hdd_dir.empty()) g_cfg.hdd_dir = L"hdd";
-    if (g_cfg.log_path.empty()) g_cfg.log_path = L"black.log";
-    settings_load(); // black.ini in the root folder; flags given above keep their values
+    if (g_cfg.hdd_dir.empty()) g_cfg.hdd_dir = g_cfg.port_dir + L"\\savedata";
+    if (g_cfg.log_path.empty()) g_cfg.log_path = g_cfg.port_dir + L"\\black.log";
+    settings_load(); // black.ini in the port folder; flags given above keep their values
     if (g_cfg.symbols_path.empty() && GetFileAttributesW(L"notes\\functions.csv") != INVALID_FILE_ATTRIBUTES)
         g_cfg.symbols_path = L"notes\\functions.csv";
     return true;
@@ -444,7 +448,7 @@ int run(void *reserve, unsigned reserve_size)
     if (known_build) install_fov_patch();
     if (known_build) install_fe_calls();
     if (known_build && g_cfg.pc_menus) { // the in-game PC SETTINGS pages, from the user's own front-end file
-        std::wstring cache = host_full_path(L"cache\\menus");
+        std::wstring cache = g_cfg.port_dir + L"\\cache\\menus";
         if (fe_build_pages(host_full_path(g_cfg.game_dir), cache)) g_cfg.menu_cache = cache;
     }
     if (g_cfg.fps == 60 && (!known_build || !install_60fps_patches())) g_cfg.fps = 30; // other builds: no 60 fps patches

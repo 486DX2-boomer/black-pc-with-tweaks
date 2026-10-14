@@ -1,2 +1,0 @@
-# Shell scripts run on Linux: LF line endings in every checkout (core.autocrlf would give them CRLF on Windows)
-*.sh text eol=lf

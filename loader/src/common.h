@@ -38,8 +38,9 @@ constexpr NTSTATUS XSTATUS_INVALID_DEVICE_REQUEST = (NTSTATUS)0xC0000010;
 struct Config {
     std::wstring xbe_path;     // game\default.xbe
     std::wstring game_dir;     // directory holding default.xbe = \Device\CdRom0
-    std::wstring hdd_dir;      // host folder backing \Device\Harddisk0\PartitionN
-    std::wstring log_path;     // black.log
+    std::wstring port_dir;     // black.exe's folder: the port's own files (savedata, black.ini, black.log, cache, perf)
+    std::wstring hdd_dir;      // host folder backing \Device\Harddisk0\PartitionN (default port_dir\savedata)
+    std::wstring log_path;     // default port_dir\black.log
     std::wstring symbols_path; // optional functions.csv for crash reports
     std::wstring screenshot_dir; // --screenshot: PNG frames go here
     bool trace = false;        // log every kernel call, not just the first of each kind
@@ -55,16 +56,16 @@ struct Config {
     float scale = 3.0f;        // render resolution = Xbox resolution x scale (any factor, e.g. 2.25 = 1080 lines)
     int render_w = 0, render_h = 0; // --resolution WxH or H: the picture's render size instead of a scale
     bool render_native = false;     // --resolution native: render at the window's (or screen's) size
-    float render_factor = 1.0f;     // with native: render at this multiple of the window (F10 cycles 1 / 1.5 / 2)
-    std::wstring rescale_at;        // tests: --rescale-at "S:factor,..." = F10 to that factor at S seconds
+    float render_factor = 1.0f;     // with native: render at this multiple of the window
+    std::wstring rescale_at;        // tests: --rescale-at "S:factor,..." = native at that factor from S seconds
     int window_w = 0, window_h = 0; // window client size; 0 = fit the screen
     // The console's video settings report a widescreen TV (EEPROM XC_VIDEO bit 16), as the Xbox Series does
     // for original Xbox games: BLACK then uses a 16:9 projection and its `_wide` UI layouts in the same 640x480
     // buffer (anamorphic), and the loader renders and shows that buffer at 16:9. --normal-aspect turns it off.
     bool widescreen = true;
-    bool fullscreen = false;   // --fullscreen: start borderless fullscreen (F11 toggles)
+    bool fullscreen = false;   // --fullscreen: start borderless fullscreen
     // Mouse look rotates the player directly (input/mouselook.cpp): mouse_sens x 0.022 degrees per count, the
-    // scale most PC shooters use (F3/F4 adjust live).
+    // scale most PC shooters use.
     float mouse_sens = 2.0f;
     bool mouse_invert = false;
     bool timer_vblank = false; // --timer-vblank: free-running 59.94 Hz vblank instead of following the display

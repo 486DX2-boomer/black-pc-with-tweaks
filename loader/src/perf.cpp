@@ -119,7 +119,6 @@ HANDLE g_render_thread;
 DWORD g_render_tid;
 uint32_t g_rt_lo, g_rt_hi;
 constexpr uint32_t kGameLo = 0x00011000, kGameHi = 0x00587A40; // the XBE image (code and data)
-ULONGLONG g_start_tick, g_saved_tick;
 std::mutex g_report_lock;
 std::string g_report_text;
 std::wstring g_report_dir;
@@ -435,7 +434,7 @@ void write_report(Recording *r)
     GetProcessAffinityMask(GetCurrentProcess(), &proc, &sys);
     if (g_game_cpu && (proc & ~g_game_cpu)) SetThreadAffinityMask(GetCurrentThread(), proc & ~g_game_cpu);
 
-    std::wstring dir = L"perf";
+    std::wstring dir = g_cfg.port_dir + L"\\perf";
     CreateDirectoryW(dir.c_str(), nullptr);
     dir += L"\\" + widen(r->started);
     for (int i = 2; !CreateDirectoryW(dir.c_str(), nullptr) && GetLastError() == ERROR_ALREADY_EXISTS && i < 100; i++) {
@@ -644,7 +643,6 @@ void write_report(Recording *r)
     }
     logf("[perf] recording saved to %s: %s", narrow(full).c_str(), head);
     delete r;
-    g_saved_tick = GetTickCount64();
     g_state = 0;
     if (HWND w = host3d::window()) PostMessageW(w, WM_APP_PERF, 0, 0);
 }
@@ -701,7 +699,6 @@ void start()
     g_phase = kWork;
     g_t0 = g_t_work = qpc();
     g_tsc0 = __rdtsc();
-    g_start_tick = GetTickCount64();
     g_sampler_run = true;
     g_sampler = std::thread(sampler_main);
     g_on = true;
@@ -774,15 +771,6 @@ void Scope::pause(int64_t now) { g_cat_ticks[cat] += now - start; }
 
 void toggle() { g_toggle_req = true; }
 bool recording() { return g_state == 1; }
-
-void title_tag(char *out, unsigned size)
-{
-    int s = g_state;
-    if (s == 1) snprintf(out, size, "REC %llu s (F2 stops) - ", (unsigned long long)((GetTickCount64() - g_start_tick) / 1000));
-    else if (s == 2) snprintf(out, size, "saving the recording... - ");
-    else if (g_saved_tick && GetTickCount64() - g_saved_tick < 8000) snprintf(out, size, "recording saved in perf\\ - ");
-    else *out = 0;
-}
 
 void swap_begin()
 {

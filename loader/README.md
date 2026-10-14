@@ -22,7 +22,8 @@ loader\build\win32\RelWithDebInfo\black.exe --info game\default.xbe     # print 
 loader\build\win32\RelWithDebInfo\black.exe --timeout 30 game\default.xbe
 ```
 
-Options: `--hdd <dir>` (host folder for HDD partitions, default `.\hdd`), `--log <file>` (default `.\black.log`),
+Options: `--hdd <dir>` (host folder for HDD partitions, default `savedata` next to black.exe), `--log <file>` (default
+`black.log` next to black.exe),
 `--verbose` (the whole log on the console too), `--trace` (log every kernel call), `--strict` (stop at the first unimplemented kernel call), `--multicore`,
 `--symbols <functions.csv>` (default `notes\functions.csv`), `--force` (other XBE builds),
 `--skip-videos` (dev: 9-second logo video instead of the long ones). `black.exe --help` lists the debugging
@@ -42,29 +43,31 @@ filling of hairline cracks between geometry pieces (Video > Fill geometry seams)
 `black.exe` is a windowed program: no console window opens. Started from a command prompt it prints a short summary
 there (startup, setup errors, exit, crashes); the full log is in `black.log`.
 
-Relative paths resolve against the current folder; if the game is not found there, black.exe looks upwards
-from its own folder for `game\default.xbe` and uses that folder (so it can be started from anywhere).
+The port keeps its own files next to black.exe (the release's `port` folder): `savedata\` (the Xbox hard disk),
+`black.ini`, `black.log`, `cache\menus`, `perf\`. If the game is not found in the current folder, black.exe looks
+upwards from its own folder for `game\default.xbe` and makes that folder current (so it can be started from anywhere);
+relative paths given on the command line resolve against it.
 
-The window has a menu bar (Game, Video, Audio, Input, Tools, Help) for the port's settings: render resolution,
-anti-aliasing, fullscreen, aspect ratio and frame rate (a new choice is saved for the next start, with a notice; the
-running game keeps its values), brightness, reverb, key bindings, mouse, auto-aim. Choices are saved to `black.ini` in the game folder; command-line flags override it for that run. Pausing (Esc) releases the mouse
-so the menu can be reached. In the game window: F11 fullscreen on/off (the window resizes at the game's aspect; other shapes get black
-bars), F3/F4 mouse sensitivity, F5/F6 gain, F7/F8 gamma, F9 anti-aliasing, F10 render size 1 / 1.5 / 2 x the window (all shown in the title), F12 dumps the next frame
-(draw log, every render target as PNG) into `work\dumps` for bug reports. F2 (or Tools > Record performance) starts and
-stops a performance recording: frame times, where the CPU time goes, threads; saved in `perf\<date_time>\` next to
-`black.ini` (summary.txt, frames.csv, threads.csv). `--perf-at S:D` records D seconds from S seconds after the first frame. On a ~60 Hz display the frame clock follows the
+The port's settings are in the game's menus (Options > PC SETTINGS, and PC SETTINGS in the pause menu; `src/fe/`):
+render resolution, anti-aliasing, field of view, brightness, gamma, fullscreen, aspect ratio and frame rate (main menu
+only, used from the next start), seam filling, effects at Xbox size, reverb, auto-aim, movie skipping, mouse and key
+bindings. Choices are saved to `black.ini`; command-line flags override it for that run. The port has no keys of its
+own and the window title is just BLACK. `--perf-at S:D` records performance for D seconds from S seconds after the
+first frame: frame times, where the CPU time goes, threads, saved in `perf\<date_time>\` (summary.txt, frames.csv,
+threads.csv). On a ~60 Hz display the frame clock follows the
 display's refresh (smooth frame delivery); `--timer-vblank` uses a fixed 59.94 Hz timer instead. The game threads run on
 one CPU like the Xbox (the last physical core, its hyperthread sibling kept free); `--game-cpu N` picks another. On weak
 PCs (old laptops with Intel graphics) play at 30 fps (Video > Frame rate), the game's original rate.
 
 Controls: every PC controller drives the Xbox pad on port 0. Keys and mouse buttons are bound to the game's actions
-(`src/input/bindings.cpp`; Input > Key bindings, `key_<action> = Key[,Key]` in black.ini): each poll a held key looks
+(`src/input/bindings.cpp`; KEY BINDINGS page, `key_<action> = Key[,Key]` in black.ini): each poll a held key looks
 up its action in the game's live binding table and presses the pad input the game reads for it, so the keys follow
 the game's controller layout. Defaults: WASD move, left / right mouse button = fire / aim, R reload, E action, C crouch,
 G grenade, F melee, wheel down / up = next / previous weapon, Z firing mode, Q suppressor, X health pack, Space
-objectives, Esc pause (always; Esc also lets go of the mouse, in menus too, and play starting or resuming takes it again). Menus, pauses and cutscenes
-(no player update) use arrows = D-pad, Enter = A, Backspace = B. Mouse = look; click the window to capture it, Alt+Tab
-releases it. Tests: `--press "95s:k:W*1500"` holds a bound key (black.ini spelling) without focus.
+objectives, Esc pause (always; Esc also lets go of the mouse, in menus too, and play starting or resuming takes it
+again). In menus, pauses and cutscenes (no player update) bound keys do nothing; arrows, Enter and Backspace go to the
+menus' own input directly (`src/fe/calls.cpp`), not through the pad, and Enter at PRESS START makes port 0 the
+player's controller. Mouse = look; click the window to capture it, Alt+Tab releases it. Tests: `--press "95s:k:W*1500"` holds a bound key (black.ini spelling) without focus.
 
 ## Local launcher (icon + shortcut)
 

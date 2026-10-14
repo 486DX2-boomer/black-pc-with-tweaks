@@ -10,9 +10,10 @@
 // A bound key looks up its action's channel in the live table and presses the pad input that feeds that channel,
 // so the keys mean the same action whatever controller layout is chosen in the game, and controllers keep working.
 //
-// Menus, pauses and cutscenes (no player update, see in_play) use fixed keys instead: arrows = D-pad, Enter = A,
-// Backspace = B; Esc there only lets go of the mouse. A key held across a switch between play and menus is ignored
-// until it is released (a press that starts play must not also act in it).
+// Menus, pauses and cutscenes (no player update, see in_play) take no bound keys and nothing goes through the pad:
+// arrows, Enter and Backspace are the menus' own inputs (up, down, left, right, select, back; held arrows repeat),
+// which fe/calls.cpp gives the menus directly; Esc there only lets go of the mouse. A key held across a switch between
+// play and menus is ignored until it is released (a press that starts play must not also act in it).
 #include "input/bindings.h"
 
 #include "common.h"
@@ -21,6 +22,7 @@
 #include "settings.h"
 
 #include <algorithm>
+#include <atomic>
 #include <bitset>
 #include <cctype>
 #include <cstring>
@@ -121,6 +123,23 @@ bool g_was_play;
 bool g_freed_by_esc; // the pause key (or Esc in a menu) let go of the mouse: take it again when play starts
 bool g_release_was_down;
 
+// Menu keys -> the menus' input ids (FEInputId); held arrows repeat like the game's own pad input.
+struct MenuKey {
+    uint16_t vk;
+    int input;
+    bool repeats;
+};
+const MenuKey kMenuKeys[] = {{VK_UP, 1, true}, {VK_DOWN, 2, true}, {VK_LEFT, 3, true}, {VK_RIGHT, 4, true},
+                             {VK_RETURN, 5, false}, {VK_BACK, 6, false}};
+constexpr int kMenuKeyCount = sizeof kMenuKeys / sizeof kMenuKeys[0];
+constexpr ULONGLONG kRepeatDelay = 400, kRepeatEvery = 120; // ms
+bool g_menu_down[kMenuKeyCount];
+int g_repeat = -1; // the held arrow that repeats
+ULONGLONG g_repeat_at;
+std::atomic<int> g_menu_input;            // pressed at the last poll, until the menus take it
+std::atomic<uint32_t> g_menu_input_frame; // when
+bool g_menu_select;                       // Enter held (movies: skip)
+
 bool raw_held(uint16_t k, bool focus, int mouse)
 {
     if (k < g_script.size() && g_script[k]) return true;
@@ -134,11 +153,6 @@ bool raw_held(uint16_t k, bool focus, int mouse)
     case KEY_WHEEL_DOWN: return false; // handled per notch
     }
     return focus && k < 0x100 && (GetAsyncKeyState(k) & 0x8000);
-}
-
-bool menu_key(uint16_t k)
-{
-    return k == VK_UP || k == VK_DOWN || k == VK_LEFT || k == VK_RIGHT || k == VK_RETURN || k == VK_BACK || k == VK_ESCAPE;
 }
 
 // Each wheel notch is one press of the key bound to that direction: held 2 polls, then 2 released so quick notches
@@ -215,8 +229,6 @@ void reset_defaults()
 
 bool fixed(int action, int slot) { return action == kPause && slot == 0; }
 
-bool reserved(uint16_t k) { return k >= VK_F2 && k <= VK_F12; }
-
 std::wstring key_name(uint16_t k)
 {
     if (!k) return L"";
@@ -277,6 +289,14 @@ void script_hold(const std::string &name)
     if (k && k < g_script.size()) g_script[k] = true;
 }
 
+int take_menu_input()
+{
+    int v = g_menu_input.exchange(0);
+    return v && g_frame_count - g_menu_input_frame <= 2 ? v : 0;
+}
+
+bool menu_select_held() { return g_menu_select; }
+
 bool in_play()
 {
     uint32_t f = mouselook_play_frame();
@@ -316,13 +336,9 @@ void apply(uint16_t &buttons, uint8_t analog[8], int16_t &lx, int16_t &ly, int16
     Pad p;
     const int32_t *table = game_table();
     bool pause_down = false;
-    for (int i = 0; i < kCount && table; i++) {
+    for (int i = 0; play && i < kCount && table; i++) {
         bool down = false;
-        for (int s = 0; s < kSlots; s++) {
-            uint16_t k = g_keys[i][s];
-            if (!play && menu_key(k)) continue; // in menus these keys are the menu keys below
-            down |= held(k);
-        }
+        for (int s = 0; s < kSlots; s++) down |= held(g_keys[i][s]);
         if (!down) continue;
         if (i == kPause) pause_down = true;
         int ch = table[kActions[i].game];
@@ -335,15 +351,28 @@ void apply(uint16_t &buttons, uint8_t analog[8], int16_t &lx, int16_t &ly, int16
         press_channel(ch, p);
     }
     bool menu_esc = false;
-    if (!play) {
-        if (held(VK_UP)) p.buttons |= 0x01;
-        if (held(VK_DOWN)) p.buttons |= 0x02;
-        if (held(VK_LEFT)) p.buttons |= 0x04;
-        if (held(VK_RIGHT)) p.buttons |= 0x08;
-        if (held(VK_RETURN)) p.analog[0] = 255; // A
-        if (held(VK_BACK)) p.analog[1] = 255; // B
-        menu_esc = held(VK_ESCAPE);
+    int input = 0;
+    ULONGLONG now = GetTickCount64();
+    for (int i = 0; i < kMenuKeyCount; i++) {
+        bool h = !play && held(kMenuKeys[i].vk);
+        if (h && !g_menu_down[i]) {
+            input = kMenuKeys[i].input;
+            g_repeat = kMenuKeys[i].repeats ? i : -1;
+            g_repeat_at = now + kRepeatDelay;
+        }
+        g_menu_down[i] = h;
     }
+    if (g_repeat >= 0 && !g_menu_down[g_repeat]) g_repeat = -1;
+    if (!input && g_repeat >= 0 && now >= g_repeat_at) {
+        input = kMenuKeys[g_repeat].input;
+        g_repeat_at = now + kRepeatEvery;
+    }
+    if (input) {
+        g_menu_input_frame = g_frame_count.load();
+        g_menu_input = input;
+    }
+    g_menu_select = g_menu_down[4];
+    if (!play) menu_esc = held(VK_ESCAPE);
     // The pause key in play and Esc in menus also let go of the mouse; play starting or
     // resuming takes it again.
     bool release = play ? pause_down : menu_esc;
@@ -404,7 +433,7 @@ bool capture_poll(bool focus, int wheel)
         bool down = g_script[vk] || (focus && (GetAsyncKeyState(vk) & 0x8000)); // tests: --press-file k:Name
         if (!candidate(vk) || !down) continue;
         any = true;
-        if (!pressed && !reserved((uint16_t)vk)) pressed = (uint16_t)vk;
+        if (!pressed) pressed = (uint16_t)vk;
     }
     g_script.reset(); // apply() does not run while capturing
     if (g_cap_wait_up) { // the key that started the capture is still down

@@ -20,7 +20,7 @@ void frame_layout(RECT *frame, RECT *picture);
 // call, wheel notches (+ = away from the user), buttons bit 0-4 = left, right, middle, X1, X2.
 bool mouse_captured();
 void request_capture(bool on); // from any thread; capturing needs the window in front
-void set_fullscreen(bool on);  // from any thread (PC SETTINGS > VIDEO > FULLSCREEN; F11 toggles in the window)
+void set_fullscreen(bool on);  // from any thread (PC SETTINGS > VIDEO > FULLSCREEN)
 bool fullscreen();
 void mouse_take(int *dx, int *dy, int *wheel);
 int mouse_buttons();

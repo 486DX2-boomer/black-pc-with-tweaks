@@ -23,24 +23,28 @@ uint16_t key(int action, int slot);
 void set_key(int action, int slot, uint16_t k);
 void reset_defaults();
 bool fixed(int action, int slot); // Esc is always the first pause key (it also cancels a key capture)
-bool reserved(uint16_t k);        // F2-F12: the port's own keys
 std::wstring key_name(uint16_t k);
 
 bool load_ini(const char *key, const char *value); // black.ini lines key_<ini>; false if not one of ours
 void save_ini(FILE *f);
 
-// Once per pad poll (input/xinput.cpp): the bound keys and mouse buttons pressed into the Xbox pad, through the
-// game's current binding table. focus: the game window is in front; mouse_live: the mouse is captured.
+// Once per pad poll (input/xinput.cpp): in play, the bound keys and mouse buttons pressed into the Xbox pad, through
+// the game's current binding table; in menus, the menu keys for take_menu_input. focus: the game window is in front;
+// mouse_live: the mouse is captured.
 void apply(uint16_t &buttons, uint8_t analog[8], int16_t &lx, int16_t &ly, int16_t &rx, int16_t &ry, bool focus,
            bool mouse_live, int wheel);
 bool in_play(); // the player is being updated (not a menu, pause or cutscene)
+// The menu key pressed (or repeating) at the last poll as the menus' input id, once: 1 up, 2 down, 3 left, 4 right,
+// 5 select (Enter), 6 back (Backspace); 0 none. The front end's input (fe/calls.cpp) takes it.
+int take_menu_input();
+bool menu_select_held(); // Enter held in a menu or movie (movies: skip)
 // Tests: --press "SECONDSs:k:Name" holds a key (black.ini spelling) for the next poll, without focus.
 void script_hold(const std::string &name);
 
 // In-game key capture (the KEY BINDINGS page, fe/bind_list.cpp): the next key or mouse button pressed after all are
-// released binds to (action, slot) and is taken from any other action; Esc cancels, Delete clears the slot, F2-F12 are
-// ignored. Meanwhile keys reach neither the game nor the menus. capture_poll() runs once per pad poll before apply()
-// and returns true while capturing (apply() is skipped then); wheel: notches, also while the mouse is not captured.
+// released binds to (action, slot) and is taken from any other action; Esc cancels, Delete clears the slot. Meanwhile
+// keys reach neither the game nor the menus. capture_poll() runs once per pad poll before apply() and returns true
+// while capturing (apply() is skipped then); wheel: notches, also while the mouse is not captured.
 void capture_start(int action, int slot);
 bool capturing();
 bool capture_poll(bool focus, int wheel);

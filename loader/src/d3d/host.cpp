@@ -159,7 +159,7 @@ LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     switch (msg) {
     case WM_CLOSE:
         g_closed = true;
-        settings_save(); // also what the F-keys changed
+        settings_save();
         request_exit(0, "window closed");
         return 0;
     case WM_APP_FULLSCREEN: // PC SETTINGS > VIDEO > FULLSCREEN (fe/pc_settings.cpp)
@@ -195,12 +195,6 @@ LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             ((MINMAXINFO *)lp)->ptMinTrackSize = {320 + fw, 320 * g_aspect_h / g_aspect_w + fh};
         }
         return 0;
-    case WM_KEYDOWN:
-        if (wp == VK_F11 && !(lp & (1 << 30))) { // not auto-repeat
-            toggle_fullscreen();
-            return 0;
-        }
-        break; // Esc is the pause key; pausing lets go of the mouse (input/bindings.cpp)
     case WM_APP_CAPTURE: // from the input poll: pause frees the mouse, resuming play takes it again
         if (!wp) capture_mouse(false);
         else if (GetForegroundWindow() == h && !IsIconic(h)) capture_mouse(true);
@@ -316,7 +310,7 @@ bool open_window(int width, int height, int aspect_w, int aspect_h)
         logf("host: could not create the window");
         return false;
     }
-    logf("host: window %dx%d (resizable at %d:%d, F11 = fullscreen)", width, height, aspect_w, aspect_h);
+    logf("host: window %dx%d (resizable at %d:%d)", width, height, aspect_w, aspect_h);
     return true;
 }
 

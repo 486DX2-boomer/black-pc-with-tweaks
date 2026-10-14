@@ -162,6 +162,52 @@ __declspec(naked) static void dispatch_thunk()
     }
 }
 
+// The menus' input. Once per front-end update FUN_00118B70 clears its input id (the int registered as externObject
+// FEInputId: 1 up, 2 down, 3 left, 4 right, 5 select, 6 back) and, while menu input is on, has FUN_00118A80 (eax = a
+// controller, ebx = the input object) set it from that controller: the player's, or each of the four while none is
+// chosen; +9/+0xC of the object are a short lock-out after a page change. On PRESS START (ListenForPlayer) the
+// object's check (+4) is FUN_0011A750: it makes the first controller with A or START held the player's (game object
+// (*0x2D45F0) + 0x21060 = it, its +8 = 1, the check off, the binding table pointer *0x2F3BD4 = game object + 0x20174)
+// and otherwise reads each controller with FUN_00118A80 too. All three calls are routed here: after the game's own
+// reading, a menu key (input/bindings.cpp take_menu_input) sets the id when no controller did, so the keyboard reaches
+// the menus without going through the pad; Enter at PRESS START makes controller port 0 (where keys and every PC
+// controller arrive) the player's, as START on it would.
+constexpr uint32_t kMenuInput = 0x00118A80, kMenuInputCalls[3] = {0x00118B9D, 0x00118BC6, 0x0011A79C};
+constexpr uint32_t kListenCheck = 0x0011A750, kGameObject = 0x002D45F0, kControllers = 0x002D45E8,
+                   kBindingTable = 0x002F3BD4;
+
+extern "C" uint32_t g_fe_menu_input = kMenuInput;
+
+extern "C" void __cdecl fe_menu_keys(uint8_t *input)
+{
+    int key = bindings::take_menu_input();
+    if (!key || *(int32_t *)input != 0 || input[9]) return;
+    uint32_t &check = *(uint32_t *)(input + 4);
+    if (check == kListenCheck) {
+        if (key != 5) return;
+        uint32_t game = *(const uint32_t *)(uintptr_t)kGameObject, controllers = *(const uint32_t *)(uintptr_t)kControllers;
+        if (!game || !controllers) return;
+        uint32_t port0 = controllers + 0x518;
+        *(uint32_t *)(uintptr_t)(game + 0x21060) = port0;
+        *(uint8_t *)(uintptr_t)(port0 + 8) = 1;
+        check = 0;
+        *(uint32_t *)(uintptr_t)kBindingTable = game + 0x20174;
+        logf("fe: Enter at PRESS START: controller port 0 plays");
+    }
+    *(int32_t *)input = key;
+}
+
+__declspec(naked) static void menu_input_thunk()
+{
+    __asm {
+        call dword ptr [g_fe_menu_input] // eax, ebx as the game passes them; keeps ebx, esi, edi
+        push ebx
+        call fe_menu_keys
+        add esp, 4
+        ret
+    }
+}
+
 void install_fe_calls()
 {
     auto *code = (uint8_t *)(uintptr_t)kDispatch;
@@ -173,4 +219,16 @@ void install_fe_calls()
     code[0] = 0xE9;
     memcpy(code + 1, &rel, 4);
     code[5] = code[6] = 0x90;
+
+    for (uint32_t at : kMenuInputCalls) {
+        auto *c = (uint8_t *)(uintptr_t)at;
+        int32_t old_rel;
+        memcpy(&old_rel, c + 1, 4);
+        if (c[0] != 0xE8 || at + 5 + old_rel != kMenuInput) {
+            logf("fe: the menu input call at 0x%08x does not match this build; the keyboard cannot use the menus", at);
+            continue;
+        }
+        int32_t r = (int32_t)((uintptr_t)&menu_input_thunk - (at + 5));
+        memcpy(c + 1, &r, 4);
+    }
 }

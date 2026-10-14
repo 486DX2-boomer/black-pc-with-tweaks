@@ -13,7 +13,7 @@
 
 namespace {
 
-const wchar_t kFile[] = L"black.ini";
+std::wstring ini_file() { return g_cfg.port_dir.empty() ? L"black.ini" : g_cfg.port_dir + L"\\black.ini"; }
 std::set<std::string> g_cli; // keys given on the command line
 std::mutex g_lock;           // the menu (window thread) and the exit path may both save
 
@@ -27,7 +27,7 @@ void settings_load()
 {
     if (g_cfg.background) return;
     FILE *f = nullptr;
-    if (_wfopen_s(&f, kFile, L"r") || !f) return;
+    if (_wfopen_s(&f, ini_file().c_str(), L"r") || !f) return;
     char line[256];
     while (fgets(line, sizeof line, f)) {
         char key[64] = "", val[128] = "";
@@ -67,7 +67,7 @@ void settings_save()
     if (g_cfg.background) return;
     std::lock_guard<std::mutex> g(g_lock);
     FILE *f = nullptr;
-    if (_wfopen_s(&f, kFile, L"w") || !f) return;
+    if (_wfopen_s(&f, ini_file().c_str(), L"w") || !f) return;
     fprintf(f, "# BLACK PC port settings (written by PC SETTINGS and on exit; command-line flags override them)\n");
     if (g_cfg.render_native) fprintf(f, "render = native\n");
     else if (g_cfg.render_h) fprintf(f, "render = %d\n", g_cfg.render_h);

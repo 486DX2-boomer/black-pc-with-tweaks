@@ -494,50 +494,18 @@ IDirect3DTexture9 *ramp_texture()
     return g_ramp_tex;
 }
 
-// One key press = one step; held keys do not repeat.
-bool key_pressed(int vk, bool focus)
-{
-    static bool down[256];
-    bool now = focus && (GetAsyncKeyState(vk) & 0x8000);
-    bool edge = now && !down[vk & 255];
-    down[vk & 255] = now;
-    return edge;
-}
-
 void present_backbuffer()
 {
     static float shown_gamma = -1.0f, shown_gain = -1.0f, shown_sens = -1.0f;
-    bool focus = GetForegroundWindow() == host3d::window();
-    if (key_pressed(VK_F3, focus)) g_cfg.mouse_sens = std::max(0.1f, g_cfg.mouse_sens / 1.1f);
-    if (key_pressed(VK_F4, focus)) g_cfg.mouse_sens = std::min(50.0f, g_cfg.mouse_sens * 1.1f);
-    if (key_pressed(VK_F5, focus)) g_cfg.gain = std::max(0.5f, g_cfg.gain - 0.1f);
-    if (key_pressed(VK_F6, focus)) g_cfg.gain = std::min(3.0f, g_cfg.gain + 0.1f);
-    if (key_pressed(VK_F7, focus)) g_cfg.gamma = std::max(0.5f, g_cfg.gamma - 0.1f);
-    if (key_pressed(VK_F8, focus)) g_cfg.gamma = std::min(3.0f, g_cfg.gamma + 0.1f);
-    if (key_pressed(VK_F9, focus)) g_cfg.aa = !g_cfg.aa;
-    if (key_pressed(VK_F2, focus)) perf::toggle();
     static int shown_aa = -1;
-    static uint32_t shown_rh;
-    static char shown_tag[96];
-    char tag[96];
-    perf::title_tag(tag, sizeof tag);
-    if (shown_gamma != g_cfg.gamma || shown_gain != g_cfg.gain || shown_sens != g_cfg.mouse_sens || shown_aa != (int)g_cfg.aa ||
-        shown_rh != host_h(g_height) * 65536 + host_w(g_width) || strcmp(tag, shown_tag)) {
-        strcpy_s(shown_tag, tag);
-        shown_rh = host_h(g_height) * 65536 + host_w(g_width);
+    if (shown_gamma != g_cfg.gamma || shown_gain != g_cfg.gain || shown_sens != g_cfg.mouse_sens || shown_aa != (int)g_cfg.aa) {
+        if (shown_aa < 0 && g_cfg.background) host3d::set_title("[AUTOMATED TEST, MUTED] BLACK");
         shown_gamma = g_cfg.gamma;
         shown_gain = g_cfg.gain;
         shown_sens = g_cfg.mouse_sens;
         shown_aa = g_cfg.aa;
-        char title[260];
-        snprintf(title, sizeof title,
-                 "%s%sBLACK - mouse %.2f (F3/F4), gain %.1f (F5/F6), gamma %.1f (F7/F8), AA %s (F9), render %ux%u (F10), F11 fullscreen",
-                 g_cfg.background ? "[AUTOMATED TEST, MUTED] " : "", tag, g_cfg.mouse_sens, g_cfg.gain, g_cfg.gamma,
-                 g_cfg.aa ? "on" : "off", host_w(g_width), host_h(g_height));
-        host3d::set_title(title);
-        if (!tag[0] || !strncmp(tag, "REC 0 ", 6))
-            logf("[d3d] mouse sensitivity %.2f, output gain %.1f, gamma %.1f, anti-aliasing %s", g_cfg.mouse_sens, g_cfg.gain,
-                 g_cfg.gamma, g_cfg.aa ? "on" : "off");
+        logf("[d3d] mouse sensitivity %.2f, output gain %.1f, gamma %.1f, anti-aliasing %s", g_cfg.mouse_sens, g_cfg.gain,
+             g_cfg.gamma, g_cfg.aa ? "on" : "off");
     }
     HostRT &bb = host_rt(g_backbuffer);
     IDirect3DSurface9 *s = nullptr;
@@ -1267,12 +1235,11 @@ void request_render_rebuild()
     g_render_request = true;
 }
 
-// After each Swap: F10 cycles the render size between 1, 1.5 and 2 x the window (switching to native mode),
-// and in native mode the render size follows the window once a resize has settled for 0.3 s.
+// After each Swap: in native mode the render size follows the window once a resize has settled for 0.3 s.
 void check_render_size()
 {
-    bool focus = GetForegroundWindow() == host3d::window(), now = false;
-    if (!g_cfg.rescale_at.empty()) { // tests: "S:factor,..." acts like F10 to that factor at S seconds
+    bool now = false;
+    if (!g_cfg.rescale_at.empty()) { // tests: "S:factor,..." sets the render size to that factor x the window at S seconds
         static ULONGLONG t0 = GetTickCount64();
         static size_t next_item;
         std::string spec = narrow(g_cfg.rescale_at);
@@ -1292,19 +1259,13 @@ void check_render_size()
             pos = comma + 1;
         }
     }
-    if (g_render_request.exchange(false)) { // PC SETTINGS or F10 chose a render size
+    if (g_render_request.exchange(false)) { // PC SETTINGS chose a render size
         RECT frame, pic;
         host3d::frame_layout(&frame, &pic);
         g_native_w = pic.right - pic.left;
         g_native_h = pic.bottom - pic.top;
         change_render_scale(g_native_w, g_native_h);
         return;
-    }
-    if (key_pressed(VK_F10, focus)) {
-        if (!g_cfg.render_native) g_cfg.render_factor = 1.0f;
-        else g_cfg.render_factor = g_cfg.render_factor < 1.25f ? 1.5f : g_cfg.render_factor < 1.75f ? 2.0f : 1.0f;
-        g_cfg.render_native = true;
-        now = true;
     }
     if (!g_cfg.render_native) return;
     RECT frame, pic;
@@ -1334,17 +1295,6 @@ uint32_t __stdcall D3DDevice_Swap(uint32_t Flags)
     capture_frame();
     uint32_t frames = ++g_frame_count;
     memdump_frame(frames);
-    { // F12 in the game window: dump the next frame (draw log + render targets) for bug reports
-        static bool f12_down;
-        bool down = GetForegroundWindow() == host3d::window() && (GetAsyncKeyState(VK_F12) & 0x8000);
-        if (down && !f12_down) {
-            if (g_cfg.screenshot_dir.empty()) g_cfg.screenshot_dir = L"work\\dumps";
-            g_cfg.debug_frame = frames + 1;
-            g_cfg.debug_frame_end = 0;
-            logf("[d3d] F12: dumping frame %u into %s", frames + 1, narrow(g_cfg.screenshot_dir).c_str());
-        }
-        f12_down = down;
-    }
     if (g_cfg.debug_frame && frames == (g_cfg.debug_frame_end ? g_cfg.debug_frame_end : g_cfg.debug_frame)) {
         dump_render_targets(frames);
         char tag[32];
@@ -1356,7 +1306,7 @@ uint32_t __stdcall D3DDevice_Swap(uint32_t Flags)
         screenshot_now(g_shot_tag.c_str());
     }
     static ULONGLONG t0 = GetTickCount64();
-    static const bool periodic = !g_cfg.screenshot_dir.empty(); // --screenshot given (F12 sets the folder later)
+    static const bool periodic = !g_cfg.screenshot_dir.empty(); // --screenshot given
     if (periodic && (frames == 1 || frames % g_cfg.shot_every == 0) && GetTickCount64() - t0 >= g_cfg.shot_start * 1000ull) {
         char tag[32];
         snprintf(tag, sizeof tag, "frame_%05u", frames);
