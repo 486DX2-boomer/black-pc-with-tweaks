@@ -11,6 +11,7 @@
 #include <cctype>
 #include <map>
 #include <mutex>
+#include <set>
 #include <unordered_map>
 #include <vector>
 
@@ -134,6 +135,8 @@ NTSTATUS resolve(HANDLE root, const XANSI_STRING *name, Resolved &r)
             DWORD a = GetFileAttributesW(alt.c_str());
             if (a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY)) {
                 r.host_nt = L"\\??\\" + alt;
+                static std::set<std::wstring> told;
+                if (told.insert(alt).second) logf("files: %s from %s", rest.c_str(), narrow(alt).c_str());
                 break;
             }
         }

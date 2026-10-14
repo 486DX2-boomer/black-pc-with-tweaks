@@ -64,7 +64,8 @@ Windows.
 
 The port keeps everything it writes in the `port` folder: `savedata\` holds the Xbox hard disk (saved games and the
 game's settings), `black.ini` the port's settings, `black.log` the log of the last run and `cache\menus` the game's menu
-files with the PC SETTINGS pages added (made again at every start from the files in `game`). The game folder can also
+files with the PC SETTINGS pages added and the game's text with COMPUTER for XBOX in its messages (made again at
+every start from the files in `game`). The game folder can also
 be somewhere else: `black.exe D:\Games\Black\game`. Only the game window opens; `black.log` records the details of
 each run.
 

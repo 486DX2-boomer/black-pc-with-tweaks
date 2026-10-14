@@ -228,6 +228,12 @@ Decomp target is functionally equivalent C++, not byte-matching (the XDK compile
   PROFILE: TextAnim char 18, rows 25.1 apart, revealed at 43/46/49 with bars at depths 7/9/11) and blacktitlemenu2
   (START MISSION / OPTIONS: TextAnim char 14, revealed at 43/46, bars 5/7) get a QUIT row (`add_menu_row`, shared with
   Options' PC SETTINGS row) in the up / down ring; it calls PCQuit, which posts WM_CLOSE (settings saved, exit).
+- **Game text without "Xbox"** (`patch_strings`, fe/pages.cpp): language\strings\MainUS.bin is {0x586A0308, a word,
+  count n (1724), table offset 16; n ascending offsets; entries: 4-byte key (sorted), NUL-terminated text, padded to 4
+  except the last}. Written to cache\menus with XBOX CONSOLE -> COMPUTER and XBOX -> COMPUTER (6 strings: free blocks,
+  saving and loading, the hard disk check); keys, order and header kept; the game reads it from the cache (k_file
+  logs each file it serves from there). The other "xbox" in the game's files are page names, platform checks and paths
+  (not shown). The port's labels: "3 X ORIGINAL" (was 3 X XBOX); EFFECTS AT XBOX SIZE stays.
   - Tested keyboard only from a copy of the user's save: logos, PRESS START, menus, level select, mission, pause menu,
     PC SETTINGS, Options, resume, quit; a held arrow repeats on a slider; KEY BINDINGS captures.
 

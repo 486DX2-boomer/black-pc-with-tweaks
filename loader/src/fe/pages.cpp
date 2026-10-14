@@ -982,6 +982,48 @@ bool rebuild(const std::wstring &game_dir, const wchar_t *file, const std::funct
     }
 }
 
+// The game's text (language\strings\MainUS.bin: a magic word, a word, the count n, the table offset 16; n offsets,
+// ascending; each entry a 4-byte key (entries sorted by key) and a NUL-terminated string, padded to 4 bytes except the
+// last): XBOX in its messages (saving and loading, free blocks, the hard disk check) reads COMPUTER instead, "XBOX
+// CONSOLE" just COMPUTER. Keys and order stay; only the offsets move.
+bool patch_strings(const std::wstring &game_dir, const std::wstring &out_root)
+{
+    const std::wstring rel = L"\\language\\strings\\MainUS.bin";
+    Bytes in;
+    if (!read_file(game_dir + rel, in)) {
+        logf("fe: %s not found", narrow(game_dir + rel).c_str());
+        return false;
+    }
+    try {
+        if (in.size() < 16) throw Error("too short");
+        uint32_t n = rd(in, 8), table = rd(in, 12);
+        if (table != 16 || table + 4ull * n > in.size()) throw Error("no string table");
+        Bytes out(in.begin(), in.begin() + table + 4 * n);
+        int changed = 0;
+        for (uint32_t i = 0; i < n; i++) {
+            uint32_t at = rd(in, table + 4 * i), end = i + 1 < n ? rd(in, table + 4 * (i + 1)) : (uint32_t)in.size();
+            if (at + 4 > end || end > in.size()) throw Error("an entry out of order");
+            std::string s((const char *)&in[at + 4], strnlen((const char *)&in[at + 4], end - at - 4)), t = s;
+            for (auto [from, to] : {std::pair<const char *, const char *>{"XBOX CONSOLE", "COMPUTER"}, {"XBOX", "COMPUTER"}})
+                for (size_t p = t.find(from); p != std::string::npos; p = t.find(from, p + strlen(to)))
+                    t.replace(p, strlen(from), to);
+            changed += t != s;
+            wr(out, table + 4 * i, (uint32_t)out.size());
+            out.insert(out.end(), in.begin() + at, in.begin() + at + 4);
+            out.insert(out.end(), t.begin(), t.end());
+            out.push_back(0);
+            while (i + 1 < n && out.size() % 4) out.push_back(0);
+        }
+        if (!write_file(out_root + rel, out)) return false;
+        logf("fe: game text: %d strings say COMPUTER instead of XBOX", changed);
+        return true;
+    } catch (const std::exception &e) {
+        logf("fe: %s is not laid out as expected (%s)", narrow(game_dir + rel).c_str(), e.what());
+        DeleteFileW((out_root + rel).c_str());
+        return false;
+    }
+}
+
 const Bytes &movie(const Container &c, const char *name)
 {
     auto it = c.movies.find(name);
@@ -1050,5 +1092,6 @@ bool fe_build_pages(const std::wstring &game_dir, const std::wstring &out_root)
     }
     logf("fe: PC SETTINGS pages: main menu %s, pause menu %s (%s)", main_ok ? "on" : "off", pause_ok ? "on" : "off",
          narrow(out_root).c_str());
-    return main_ok || pause_ok;
+    bool text_ok = patch_strings(game_dir, out_root);
+    return main_ok || pause_ok || text_ok;
 }

@@ -38,7 +38,7 @@ struct Res {
 };
 const Res kRes[] = {{true, 1.0f, 0, L"WINDOW SIZE"}, {true, 1.5f, 0, L"1.5 X WINDOW"}, {true, 2.0f, 0, L"2 X WINDOW"},
                     {false, 1.0f, 720, L"720P"},     {false, 1.0f, 1080, L"1080P"},   {false, 1.0f, 1440, L"1440P"},
-                    {false, 1.0f, 2160, L"2160P"},   {false, 1.0f, 0, L"3 X XBOX"}};
+                    {false, 1.0f, 2160, L"2160P"},   {false, 1.0f, 0, L"3 X ORIGINAL"}};
 constexpr int kResN = sizeof kRes / sizeof kRes[0];
 int res_get()
 {
