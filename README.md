@@ -1,3 +1,13 @@
+# BLACK PC port (with tweaks)
+
+This is forked from [https://github.com/Spark198rus/black-pc](Spark198rus/black-pc) with the following features added:
+
+- Blur effect during reloading disabled
+- Lean left/right with adjustable lean distance and angle
+- PC Settings options menu has been rearranged around with a new TWEAKS section
+
+The rest of the README from the original repo is below:
+
 # BLACK PC port
 
 An unofficial native Windows port of **BLACK** (Criterion Games, 2006), made from the original Xbox version (NTSC-U).
