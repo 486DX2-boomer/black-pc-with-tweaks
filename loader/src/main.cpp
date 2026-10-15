@@ -89,7 +89,7 @@ void usage()
            "  --mouse-sens K    mouse look sensitivity, K x 0.022 degrees per count (default 2.0)\n"
            "  --mouse-invert    mouse forward looks down\n"
            "  --autoaim         the game's auto-aim (the view pulling toward enemies), off by default; --no-autoaim\n"
-           "  --lean-angle D    tactical lean: view roll at full lean in degrees (default 10); --lean-offset M: eye shift (0.35)\n"
+           "  --lean-angle D    tactical lean: view roll at full lean in degrees (default 10); --lean-offset M: eye shift (0.35; PC SETTINGS > CONTROLS)\n"
            "  --no-reload-blur  no screen blur while reloading (default: on, as the original); --reload-blur\n"
            "  --fov D           horizontal field of view in play, 50-120 degrees (default 70, the game's; PC SETTINGS > VIDEO)\n"
            "  --no-movie-skip   movies skip only as in the original (default: A / START skip every movie)\n"
@@ -209,6 +209,7 @@ bool parse_args()
             std::wstring v;
             if (!next(v)) return false;
             float f = (float)_wtof(v.c_str());
+            settings_mark_cli(a == L"--lean-angle" ? "lean_angle" : "lean_offset");
             if (a == L"--lean-angle") g_cfg.lean_angle = std::clamp(f, -45.0f, 45.0f);
             else g_cfg.lean_offset = std::clamp(f, -2.0f, 2.0f);
         } else if (a == L"--no-reload-blur") { g_cfg.reload_blur = false; settings_mark_cli("reloadblur"); }

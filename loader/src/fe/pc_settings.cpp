@@ -61,7 +61,8 @@ void res_set(int i)
 }
 
 // A slider row has the 26 positions of the game's slider clip (Sound Setup's bullet bar): field of view 70-120 in
-// steps of 2, brightness and gamma 0.5-3.0 in steps of 0.1, mouse sensitivity 0.25-6.5 in steps of 0.25.
+// steps of 2, brightness and gamma 0.5-3.0 in steps of 0.1, mouse sensitivity 0.25-6.5 in steps of 0.25, lean angle
+// 0-25 degrees in steps of 1, lean distance 0-0.625 m in steps of 0.025.
 constexpr int kSteps = 26;
 int step_of(float v, float first, float step) { return std::clamp((int)std::lround((v - first) / step), 0, kSteps - 1); }
 const float kReverb[] = {0.0f, 0.5f, 1.0f, 1.5f, 2.0f}; // 0 = off
@@ -138,6 +139,11 @@ const Row kRows[] = {
     {"KEY BINDINGS", 1, [] { return 0; }, [](int) {}, [](int) { return std::wstring(); }}, // opens the bindings page
     // AUDIO AND GAME, added later (appended so the rows above keep their numbers)
     {"RELOAD BLUR", 2, [] { return (int)g_cfg.reload_blur; }, [](int i) { reload_blur_set(i != 0); }, [](int i) { return on_off(i); }},
+    // CONTROLS, added later: tactical lean (input/lean.cpp reads g_cfg every frame)
+    {"LEAN ANGLE", kSteps, [] { return step_of(g_cfg.lean_angle, 0, 1); }, [](int i) { g_cfg.lean_angle = (float)i; },
+     [](int i) { return i ? number((float)i, L"%.0f") : std::wstring(L"0 (NO ROLL)"); }, true},
+    {"LEAN DISTANCE", kSteps, [] { return step_of(g_cfg.lean_offset, 0, 0.025f); }, [](int i) { g_cfg.lean_offset = 0.025f * i; },
+     [](int i) { return i ? number(0.025f * i, L"%.2f M") : std::wstring(L"0 (NO SHIFT)"); }, true},
 };
 constexpr int kRowN = sizeof kRows / sizeof kRows[0];
 constexpr int kKeyBindings = 15;
@@ -150,7 +156,7 @@ const std::vector<Group> &groups()
         {"PCVideo", "VIDEO", {0, 1, 2, 3, 4, 5}},
         {"PCDisplay", "DISPLAY", {6, 7, 8, 9}},
         {"PCGame", "AUDIO AND GAME", {10, 11, 16, 12}},
-        {"PCControls", "CONTROLS", {13, 14, kKeyBindings}},
+        {"PCControls", "CONTROLS", {13, 14, 17, 18, kKeyBindings}},
     };
     return g;
 }

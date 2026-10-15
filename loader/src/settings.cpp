@@ -54,6 +54,8 @@ void settings_load()
         else if (k == "mouse_invert") g_cfg.mouse_invert = v != 0;
         else if (k == "autoaim") g_cfg.autoaim = v != 0;
         else if (k == "reloadblur") g_cfg.reload_blur = v != 0;
+        else if (k == "lean_angle") g_cfg.lean_angle = std::clamp(v, -45.0f, 45.0f);
+        else if (k == "lean_offset") g_cfg.lean_offset = std::clamp(v, -2.0f, 2.0f);
         else if (k == "fov") g_cfg.fov = std::clamp(v, 50.0f, 120.0f);
         else if (k == "skipanymovie") g_cfg.skip_movies = v != 0;
         else if (k == "reverb") g_cfg.reverb = v != 0;
