@@ -1,6 +1,6 @@
 # BLACK PC port (with tweaks)
 
-This is forked from [https://github.com/Spark198rus/black-pc](Spark198rus/black-pc) with the following features added:
+This is forked from [Spark198rus/black-pc](https://github.com/Spark198rus/black-pc) with the following features added:
 
 - Blur effect during reloading disabled
 - Lean left/right with adjustable lean distance and angle
