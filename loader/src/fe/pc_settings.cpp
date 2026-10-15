@@ -123,7 +123,7 @@ const Row kRows[] = {
          xd3d::request_render_rebuild();
      },
      [](int i) { return on_off(i); }},
-    // AUDIO AND GAME
+    // AUDIO AND MOVIES (10, 12), TWEAKS (11)
     {"ROOM REVERB", 5, [] { return g_cfg.reverb ? std::max(1, nearest(kReverb, g_cfg.reverb_gain)) : 0; },
      [](int i) {
          g_cfg.reverb = i != 0;
@@ -137,9 +137,9 @@ const Row kRows[] = {
      [](int i) { g_cfg.mouse_sens = 0.25f * (i + 1); }, [](int i) { return number(0.25f * (i + 1), L"%.2f"); }, true},
     {"INVERT MOUSE", 2, [] { return (int)g_cfg.mouse_invert; }, [](int i) { g_cfg.mouse_invert = i != 0; }, [](int i) { return on_off(i); }},
     {"KEY BINDINGS", 1, [] { return 0; }, [](int) {}, [](int) { return std::wstring(); }}, // opens the bindings page
-    // AUDIO AND GAME, added later (appended so the rows above keep their numbers)
+    // TWEAKS, added later (appended so the rows above keep their numbers)
     {"RELOAD BLUR", 2, [] { return (int)g_cfg.reload_blur; }, [](int i) { reload_blur_set(i != 0); }, [](int i) { return on_off(i); }},
-    // CONTROLS, added later: tactical lean (input/lean.cpp reads g_cfg every frame)
+    // TWEAKS: tactical lean (input/lean.cpp reads g_cfg every frame)
     {"LEAN ANGLE", kSteps, [] { return step_of(g_cfg.lean_angle, 0, 1); }, [](int i) { g_cfg.lean_angle = (float)i; },
      [](int i) { return i ? number((float)i, L"%.0f") : std::wstring(L"0 (NO ROLL)"); }, true},
     {"LEAN DISTANCE", kSteps, [] { return step_of(g_cfg.lean_offset, 0, 0.025f); }, [](int i) { g_cfg.lean_offset = 0.025f * i; },
@@ -155,8 +155,9 @@ const std::vector<Group> &groups()
     static const std::vector<Group> g = {
         {"PCVideo", "VIDEO", {0, 1, 2, 3, 4, 5}},
         {"PCDisplay", "DISPLAY", {6, 7, 8, 9}},
-        {"PCGame", "AUDIO AND GAME", {10, 11, 16, 12}},
-        {"PCControls", "CONTROLS", {13, 14, 17, 18, kKeyBindings}},
+        {"PCTweaks", "TWEAKS", {11, 16, 17, 18}},
+        {"PCAudio", "AUDIO AND MOVIES", {10, 12}},
+        {"PCControls", "CONTROLS", {13, 14, kKeyBindings}},
     };
     return g;
 }

@@ -1,4 +1,4 @@
-// Reload blur switch, on by default (PC SETTINGS > AUDIO AND GAME, --no-reload-blur / --reload-blur).
+// Reload blur switch, on by default (PC SETTINGS > TWEAKS, --no-reload-blur / --reload-blur).
 //
 // The blur is mode 1 of the post-process controller at *0x2D1990 + 0x830A0 (mode +0x34 = game +0x830D4, timer +0x14,
 // strength +0x10 = blend alpha of the blur pass FUN_001772E0). The controller update FUN_0015E260 runs mode 1 through

@@ -101,10 +101,11 @@ menu (below OPTIONS).
 |---|---|
 | VIDEO | render resolution, anti-aliasing, field of view, brightness, gamma, fullscreen |
 | DISPLAY | aspect ratio, frame rate (main menu only: used from the next start), filling geometry seams, effects at Xbox size |
-| AUDIO AND GAME | room reverb, auto-aim, skipping any movie |
+| TWEAKS | auto-aim, reload blur, lean angle, lean distance |
+| AUDIO AND MOVIES | room reverb, skipping any movie |
 | CONTROLS | mouse sensitivity, mouse inversion, key bindings |
 
-Left / right change a setting; field of view, brightness, gamma and mouse sensitivity are sliders. Changes apply at
+Left / right change a setting; field of view, brightness, gamma, lean angle, lean distance and mouse sensitivity are sliders. Changes apply at
 once and are saved to `black.ini`. `--no-pc-menus` leaves the game's menus as they are.
 
 `black.exe --help` lists the command-line options. They override `black.ini` for that run, for example
@@ -116,7 +117,7 @@ same factor as before, cutscenes keep their own framing, and the gun and hands k
 made for 70 and their animations would show their ends at a wider view).
 
 The game lets you skip a movie only once you have earned it (the intro and a mission's movies after completing that
-mission, the logos never). The port lets A, START or Enter skip every movie; set PC SETTINGS > AUDIO AND GAME > SKIP ANY
+mission, the logos never). The port lets A, START or Enter skip every movie; set PC SETTINGS > AUDIO AND MOVIES > SKIP ANY
 MOVIE to off (or start with `--no-movie-skip`) for the original rule.
 
 ## Known issues
