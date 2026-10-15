@@ -64,7 +64,7 @@ Controls: every PC controller drives the Xbox pad on port 0. Keys and mouse butt
 up its action in the game's live binding table and presses the pad input the game reads for it, so the keys follow
 the game's controller layout. Defaults: WASD move, left / right mouse button = fire / aim, R reload, E action, C crouch,
 G grenade, F melee, wheel down / up = next / previous weapon, Z firing mode, Q suppressor, X health pack, Space
-objectives, Esc pause (always; Esc also lets go of the mouse, in menus too, and play starting or resuming takes it
+objectives, V / B lean left / right (experimental), Esc pause (always; Esc also lets go of the mouse, in menus too, and play starting or resuming takes it
 again). In menus, pauses and cutscenes (no player update) bound keys do nothing; arrows, Enter and Backspace go to the
 menus' own input directly (`src/fe/calls.cpp`), not through the pad, and Enter at PRESS START makes port 0 the
 player's controller. Mouse = look; click the window to capture it, Alt+Tab releases it. Tests: `--press "95s:k:W*1500"` holds a bound key (black.ini spelling) without focus.
