@@ -84,6 +84,7 @@ void settings_save()
     fprintf(f, "reverb = %d\nreverb_gain = %.2f\n", g_cfg.reverb ? 1 : 0, g_cfg.reverb_gain);
     fprintf(f, "autoaim = %d\n", g_cfg.autoaim ? 1 : 0);
     fprintf(f, "reloadblur = %d\n", g_cfg.reload_blur ? 1 : 0);
+    fprintf(f, "lean_angle = %.1f\nlean_offset = %.3f\n", g_cfg.lean_angle, g_cfg.lean_offset);
     fprintf(f, "fov = %.1f\n", g_cfg.fov);
     fprintf(f, "skipanymovie = %d\n", g_cfg.skip_movies ? 1 : 0);
     fprintf(f, "seamfill = %d\n", g_cfg.seam_fill ? 1 : 0);
